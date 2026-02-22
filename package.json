@@ -1,0 +1,43 @@
+{
+  "name": "maxmux",
+  "version": "0.1.0",
+  "description": "Modern terminal session manager — a tmux alternative built with TypeScript",
+  "type": "module",
+  "bin": {
+    "maxmux": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --compile --outfile maxmux",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "keywords": [
+    "terminal",
+    "multiplexer",
+    "tmux",
+    "session",
+    "manager",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxmux-terminal/maxmux.git"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@xterm/headless": "^6.0.0",
+    "node-pty": "^1.1.0",
+    "zod": "^4.3.6"
+  }
+}

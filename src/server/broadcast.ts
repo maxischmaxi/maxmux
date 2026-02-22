@@ -1,0 +1,105 @@
+import type { Socket } from "node:net";
+import type { SystemMetrics } from "../statusbar/types.ts";
+
+export type ServerMessage =
+  | { type: "output"; paneId: string; data: string }
+  | {
+      type: "state";
+      sessions: any[];
+      activeSession: string;
+    }
+  | {
+      type: "layout";
+      layout: any;
+      paneRects: Record<string, any>;
+    }
+  | { type: "pane:exited"; paneId: string; exitCode: number }
+  | { type: "metrics"; data: SystemMetrics }
+  | { type: "error"; message: string };
+
+export class Broadcaster {
+  private clients: Map<string, Socket> = new Map();
+  private clientSessions: Map<string, string> = new Map(); // clientId -> sessionId
+
+  addClient(id: string, socket: Socket): void {
+    this.clients.set(id, socket);
+  }
+
+  removeClient(id: string): void {
+    this.clients.delete(id);
+    this.clientSessions.delete(id);
+  }
+
+  setClientSession(clientId: string, sessionId: string): void {
+    this.clientSessions.set(clientId, sessionId);
+  }
+
+  getClientSession(clientId: string): string | undefined {
+    return this.clientSessions.get(clientId);
+  }
+
+  send(clientId: string, message: ServerMessage): void {
+    const socket = this.clients.get(clientId);
+    if (socket && !socket.destroyed) {
+      try {
+        socket.write(JSON.stringify(message) + "\n");
+      } catch {
+        // Client disconnected
+        this.removeClient(clientId);
+      }
+    }
+  }
+
+  cork(clientId: string): void {
+    const socket = this.clients.get(clientId);
+    if (socket && !socket.destroyed) {
+      socket.cork();
+    }
+  }
+
+  uncork(clientId: string): void {
+    const socket = this.clients.get(clientId);
+    if (socket && !socket.destroyed) {
+      process.nextTick(() => {
+        if (!socket.destroyed) socket.uncork();
+      });
+    }
+  }
+
+  sendToSession(sessionId: string, message: ServerMessage): void {
+    for (const [clientId, sid] of this.clientSessions) {
+      if (sid === sessionId) {
+        this.send(clientId, message);
+      }
+    }
+  }
+
+  broadcast(message: ServerMessage): void {
+    for (const clientId of this.clients.keys()) {
+      this.send(clientId, message);
+    }
+  }
+
+  getClientCount(): number {
+    return this.clients.size;
+  }
+
+  getSessionClients(sessionId: string): string[] {
+    const clients: string[] = [];
+    for (const [clientId, sid] of this.clientSessions) {
+      if (sid === sessionId) clients.push(clientId);
+    }
+    return clients;
+  }
+
+  notifyShutdown(): void {
+    this.broadcast({ type: "error", message: "server-shutdown" });
+    for (const socket of this.clients.values()) {
+      if (!socket.destroyed) {
+        socket.end();
+      }
+    }
+    this.clients.clear();
+    this.clientSessions.clear();
+  }
+}

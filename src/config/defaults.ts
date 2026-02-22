@@ -1,0 +1,66 @@
+import type { MaxMuxConfig } from "./schema.ts";
+
+export const DEFAULT_KEYBINDINGS: Record<string, string> = {
+  c: "window:create",
+  n: "window:next",
+  p: "window:previous",
+  ",": "window:rename",
+  "&": "window:close",
+  "%": "pane:split-horizontal",
+  '"': "pane:split-vertical",
+  o: "pane:next",
+  x: "pane:close",
+  z: "pane:zoom",
+  Up: "pane:focus-up",
+  Down: "pane:focus-down",
+  Left: "pane:focus-left",
+  Right: "pane:focus-right",
+  s: "session:list",
+  f: "session:find",
+  $: "session:rename",
+  d: "session:detach",
+  Q: "server:kill",
+  ":": "command-palette",
+  "?": "keybindings:show",
+};
+
+export const DEFAULT_GLOBAL_KEYBINDINGS: Record<string, string> = {};
+
+export const DEFAULT_CONFIG: MaxMuxConfig = {
+  prefixKey: "C-a",
+  prefixTimeout: 0,
+  shell: process.env.SHELL || "/bin/bash",
+  theme: {
+    statusBar: {
+      bg: "#1e1e2e",
+      fg: "#cdd6f4",
+      active: "#89b4fa",
+    },
+    border: {
+      style: "rounded",
+      fg: "#585b70",
+      activeFg: "#89b4fa",
+    },
+  },
+  keybindings: DEFAULT_KEYBINDINGS,
+  globalKeybindings: DEFAULT_GLOBAL_KEYBINDINGS,
+  statusBar: {
+    enabled: true,
+    position: "bottom",
+    theme: "catppuccin-mocha",
+    separator: { style: "powerline" },
+    icons: true,
+    left: ["session", "windows"],
+    right: ["git", "cwd", "datetime"],
+    modules: {},
+    refreshInterval: 1000,
+    metricsInterval: 5000,
+  },
+  sessions: {
+    autoSave: true,
+    autoSaveInterval: 30_000,
+    autoRestore: true,
+    savePath: "~/.maxmux/sessions/",
+  },
+  plugins: [],
+};
