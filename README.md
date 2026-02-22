@@ -113,42 +113,42 @@ Press the prefix, release, then press the action key.
 
 ### Windows
 
-| Keys | Action |
-|---|---|
+| Keys           | Action            |
+| -------------- | ----------------- |
 | `prefix` + `c` | Create new window |
-| `prefix` + `n` | Next window |
-| `prefix` + `p` | Previous window |
-| `prefix` + `,` | Rename window |
-| `prefix` + `&` | Close window |
+| `prefix` + `n` | Next window       |
+| `prefix` + `p` | Previous window   |
+| `prefix` + `,` | Rename window     |
+| `prefix` + `&` | Close window      |
 
 Windows preserve their terminal content — programs like vim keep running in the background when you switch windows, and the full screen is restored when you switch back.
 
 ### Panes
 
-| Keys | Action |
-|---|---|
-| `prefix` + `%` | Split horizontally (left/right) |
-| `prefix` + `"` | Split vertically (top/bottom) |
-| `prefix` + `o` | Cycle to next pane |
-| `prefix` + `x` | Close current pane |
-| `prefix` + `z` | Toggle pane zoom (fullscreen) |
-| `prefix` + `Arrow` | Focus pane in direction |
+| Keys               | Action                          |
+| ------------------ | ------------------------------- |
+| `prefix` + `%`     | Split horizontally (left/right) |
+| `prefix` + `"`     | Split vertically (top/bottom)   |
+| `prefix` + `o`     | Cycle to next pane              |
+| `prefix` + `x`     | Close current pane              |
+| `prefix` + `z`     | Toggle pane zoom (fullscreen)   |
+| `prefix` + `Arrow` | Focus pane in direction         |
 
 ### Sessions
 
-| Keys | Action |
-|---|---|
-| `prefix` + `d` | Detach from session |
-| `prefix` + `s` | Session list |
+| Keys           | Action               |
+| -------------- | -------------------- |
+| `prefix` + `d` | Detach from session  |
+| `prefix` + `s` | Session list         |
 | `prefix` + `f` | Fuzzy session finder |
-| `prefix` + `$` | Rename session |
+| `prefix` + `$` | Rename session       |
 
 ### Other
 
-| Keys | Action |
-|---|---|
-| `prefix` + `Q` | Kill server |
-| `prefix` + `:` | Command palette |
+| Keys           | Action               |
+| -------------- | -------------------- |
+| `prefix` + `Q` | Kill server          |
+| `prefix` + `:` | Command palette      |
 | `prefix` + `?` | Show all keybindings |
 
 ---
@@ -173,39 +173,39 @@ maxmux --version                # Show version
 Create a `maxmux.config.ts` in your project directory or at `~/.config/maxmux/maxmux.config.ts`:
 
 ```typescript
-import { defineConfig } from 'maxmux'
+import { defineConfig } from "maxmux";
 
 export default defineConfig({
   // Prefix key (default: Ctrl+a)
-  prefixKey: 'C-a',
+  prefixKey: "C-a",
 
   // Timeout for prefix mode in ms (0 = no timeout)
   prefixTimeout: 0,
 
   // Default shell
-  shell: '/bin/zsh',
+  shell: "/bin/zsh",
 
   // Theme (Catppuccin Mocha defaults)
   theme: {
     statusBar: {
-      bg: '#1e1e2e',
-      fg: '#cdd6f4',
-      active: '#89b4fa',
+      bg: "#1e1e2e",
+      fg: "#cdd6f4",
+      active: "#89b4fa",
     },
     border: {
-      style: 'rounded',   // 'rounded' | 'sharp' | 'double' | 'none'
-      fg: '#585b70',
-      activeFg: '#89b4fa',
+      style: "rounded", // 'rounded' | 'sharp' | 'double' | 'none'
+      fg: "#585b70",
+      activeFg: "#89b4fa",
     },
   },
 
   // Prefix keybindings (prefix + key → command)
   keybindings: {
-    c: 'window:create',
-    n: 'window:next',
-    p: 'window:previous',
-    '%': 'pane:split-horizontal',
-    '"': 'pane:split-vertical',
+    c: "window:create",
+    n: "window:next",
+    p: "window:previous",
+    "%": "pane:split-horizontal",
+    '"': "pane:split-vertical",
     // ... see examples/maxmux.config.ts for full list
   },
 
@@ -223,7 +223,7 @@ export default defineConfig({
 
   // Plugins
   plugins: [],
-})
+});
 ```
 
 The config is fully type-safe — your editor provides autocomplete for every option.
@@ -275,29 +275,29 @@ globalKeybindings: {
 
 ### Available Commands
 
-| Command | Description |
-|---|---|
-| `window:create` | Create a new window |
-| `window:next` | Switch to next window |
-| `window:previous` | Switch to previous window |
-| `window:rename` | Rename current window |
-| `window:close` | Close current window |
-| `pane:split-horizontal` | Split pane left/right |
-| `pane:split-vertical` | Split pane top/bottom |
-| `pane:next` | Cycle to next pane |
-| `pane:close` | Close current pane |
-| `pane:zoom` | Toggle pane zoom |
-| `pane:focus-up` | Focus pane above |
-| `pane:focus-down` | Focus pane below |
-| `pane:focus-left` | Focus pane to the left |
-| `pane:focus-right` | Focus pane to the right |
-| `session:list` | Show session list |
-| `session:find` | Fuzzy session finder |
-| `session:rename` | Rename current session |
-| `session:detach` | Detach from session |
-| `server:kill` | Kill the MaxMux server |
-| `command-palette` | Open command palette |
-| `keybindings:show` | Show all keybindings |
+| Command                 | Description               |
+| ----------------------- | ------------------------- |
+| `window:create`         | Create a new window       |
+| `window:next`           | Switch to next window     |
+| `window:previous`       | Switch to previous window |
+| `window:rename`         | Rename current window     |
+| `window:close`          | Close current window      |
+| `pane:split-horizontal` | Split pane left/right     |
+| `pane:split-vertical`   | Split pane top/bottom     |
+| `pane:next`             | Cycle to next pane        |
+| `pane:close`            | Close current pane        |
+| `pane:zoom`             | Toggle pane zoom          |
+| `pane:focus-up`         | Focus pane above          |
+| `pane:focus-down`       | Focus pane below          |
+| `pane:focus-left`       | Focus pane to the left    |
+| `pane:focus-right`      | Focus pane to the right   |
+| `session:list`          | Show session list         |
+| `session:find`          | Fuzzy session finder      |
+| `session:rename`        | Rename current session    |
+| `session:detach`        | Detach from session       |
+| `server:kill`           | Kill the MaxMux server    |
+| `command-palette`       | Open command palette      |
+| `keybindings:show`      | Show all keybindings      |
 
 ### Priority
 
@@ -315,37 +315,37 @@ When a key is pressed, MaxMux checks in this order:
 Plugins hook into MaxMux lifecycle events to add features:
 
 ```typescript
-import { defineConfig } from 'maxmux'
-import type { MaxMuxPlugin } from 'maxmux'
+import { defineConfig } from "maxmux";
+import type { MaxMuxPlugin } from "maxmux";
 
 function gitBranch(): MaxMuxPlugin {
   return {
-    name: 'git-branch',
+    name: "git-branch",
     setup(ctx) {
-      ctx.on('render:statusbar', (items) => {
-        return [...items, { text: ' main', align: 'right' }]
-      })
+      ctx.on("render:statusbar", (items) => {
+        return [...items, { text: " main", align: "right" }];
+      });
     },
-  }
+  };
 }
 
 export default defineConfig({
   plugins: [gitBranch()],
-})
+});
 ```
 
 ### Plugin Events
 
-| Event | Description |
-|---|---|
-| `session:created` | A new session was created |
-| `session:closed` | A session was closed |
-| `window:created` | A new window was created |
-| `window:closed` | A window was closed |
-| `pane:created` | A new pane was created |
-| `pane:closed` | A pane was closed |
+| Event              | Description                                 |
+| ------------------ | ------------------------------------------- |
+| `session:created`  | A new session was created                   |
+| `session:closed`   | A session was closed                        |
+| `window:created`   | A new window was created                    |
+| `window:closed`    | A window was closed                         |
+| `pane:created`     | A new pane was created                      |
+| `pane:closed`      | A pane was closed                           |
 | `render:statusbar` | Status bar is being rendered (modify items) |
-| `config:loaded` | Configuration was loaded (modify config) |
+| `config:loaded`    | Configuration was loaded (modify config)    |
 
 ---
 
@@ -358,7 +358,7 @@ Server (~/.maxmux/server.sock)          Clients
 ┌────────────────────────┐
 │  Session Manager       │◄────────── maxmux (attach)
 │  PTY Manager           │◄────────── maxmux (attach)
-│  Terminal Buffers       │◄────────── maxmux ls (CLI)
+│  Terminal Buffers      │◄────────── maxmux ls (CLI)
 │  Plugin System         │
 │  Auto-Save             │
 └────────────────────────┘
