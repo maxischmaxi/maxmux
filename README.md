@@ -3,7 +3,7 @@
 A modern terminal session manager — like tmux, but built with TypeScript.
 
 ```bash
-┌─ editor ──────────────────┬─ terminal ────────────┐
+┌─ editor ──────────────────┬─ terminal ─────────────┐
 │                           │ $ npm run build        │
 │  ~/src/app.ts             │ ✓ Done in 0.42s        │
 │                           │ $ █                    │
