@@ -1,6 +1,18 @@
-# MaxMux
+<p align="center">
+  <img src="maxmux.png" alt="MaxMux" width="800" />
+</p>
 
-A modern terminal session manager — like tmux, but built with TypeScript.
+<h1 align="center">MaxMux</h1>
+
+<p align="center">
+  A modern terminal session manager — like tmux, but built with TypeScript.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@maxischmaxi/maxmux"><img src="https://img.shields.io/npm/v/@maxischmaxi/maxmux" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@maxischmaxi/maxmux"><img src="https://img.shields.io/npm/dm/@maxischmaxi/maxmux" alt="npm downloads" /></a>
+  <a href="https://github.com/maxischmaxi/maxmux/blob/main/LICENSE"><img src="https://img.shields.io/github/license/maxischmaxi/maxmux" alt="license" /></a>
+</p>
 
 ```bash
 ┌─ editor ──────────────────┬─ terminal ─────────────┐
