@@ -14,20 +14,6 @@
   <a href="https://github.com/maxischmaxi/maxmux/blob/main/LICENSE"><img src="https://img.shields.io/github/license/maxischmaxi/maxmux" alt="license" /></a>
 </p>
 
-```bash
-┌─ editor ──────────────────┬─ terminal ─────────────┐
-│                           │ $ npm run build        │
-│  ~/src/app.ts             │ ✓ Done in 0.42s        │
-│                           │ $ █                    │
-│                           │                        │
-│                           │                        │
-├─ logs ────────────────────┴────────────────────────┤
-│ [2025-01-15 14:32:01] Server started on :3000      │
-│ [2025-01-15 14:32:05] GET /api/users 200 12ms      │
-└────────────────────────────────────────────────────┘
- [main] 0:editor* 1:logs                        14:32
-```
-
 **Why MaxMux?**
 
 - **TypeScript config** — `maxmux.config.ts` instead of `.tmux.conf`
@@ -188,30 +174,30 @@ Press `prefix` + `[` to enter copy mode. This freezes the pane content and lets 
 
 **Navigation:**
 
-| Key          | Action              |
-| ------------ | ------------------- |
-| `k` / `Up`   | Move cursor up      |
-| `j` / `Down` | Move cursor down    |
-| `h` / `Left` | Move cursor left    |
-| `l` / `Right`| Move cursor right   |
-| `Ctrl+u`     | Half page up        |
-| `Ctrl+d`     | Half page down      |
-| `g`          | Go to top           |
-| `G`          | Go to bottom        |
-| `0`          | Start of line       |
-| `$`          | End of line         |
-| `w`          | Next word           |
-| `b`          | Previous word       |
+| Key           | Action            |
+| ------------- | ----------------- |
+| `k` / `Up`    | Move cursor up    |
+| `j` / `Down`  | Move cursor down  |
+| `h` / `Left`  | Move cursor left  |
+| `l` / `Right` | Move cursor right |
+| `Ctrl+u`      | Half page up      |
+| `Ctrl+d`      | Half page down    |
+| `g`           | Go to top         |
+| `G`           | Go to bottom      |
+| `0`           | Start of line     |
+| `$`           | End of line       |
+| `w`           | Next word         |
+| `b`           | Previous word     |
 
 **Selection & Copy:**
 
-| Key          | Action                              |
-| ------------ | ----------------------------------- |
-| `v`          | Start selection                     |
-| `V`          | Start line selection                |
-| `y`          | Yank (copy) selection to clipboard  |
-| `Escape`     | Cancel selection / exit copy mode   |
-| `q`          | Exit copy mode                      |
+| Key      | Action                             |
+| -------- | ---------------------------------- |
+| `v`      | Start selection                    |
+| `V`      | Start line selection               |
+| `y`      | Yank (copy) selection to clipboard |
+| `Escape` | Cancel selection / exit copy mode  |
+| `q`      | Exit copy mode                     |
 
 You can also select text by dragging with the mouse — the selection is automatically copied to the clipboard on release.
 
@@ -247,19 +233,19 @@ maxmux display-message -p '<format>' [-t session]  # Query session info
 
 `display-message` supports these format variables:
 
-| Variable              | Description                            |
-| --------------------- | -------------------------------------- |
-| `#{session_name}`     | Name of the current session            |
-| `#{session_id}`       | ID of the current session              |
-| `#{window_name}`      | Name of the active window              |
-| `#{window_id}`        | ID of the active window                |
-| `#{window_index}`     | Index of the active window             |
-| `#{pane_id}`          | ID of the active pane                  |
-| `#{pane_index}`       | Index of the active pane               |
-| `#{pane_at_left}`     | `1` if no pane to the left, else `0`   |
-| `#{pane_at_right}`    | `1` if no pane to the right, else `0`  |
-| `#{pane_at_top}`      | `1` if no pane above, else `0`         |
-| `#{pane_at_bottom}`   | `1` if no pane below, else `0`         |
+| Variable            | Description                           |
+| ------------------- | ------------------------------------- |
+| `#{session_name}`   | Name of the current session           |
+| `#{session_id}`     | ID of the current session             |
+| `#{window_name}`    | Name of the active window             |
+| `#{window_id}`      | ID of the active window               |
+| `#{window_index}`   | Index of the active window            |
+| `#{pane_id}`        | ID of the active pane                 |
+| `#{pane_index}`     | Index of the active pane              |
+| `#{pane_at_left}`   | `1` if no pane to the left, else `0`  |
+| `#{pane_at_right}`  | `1` if no pane to the right, else `0` |
+| `#{pane_at_top}`    | `1` if no pane above, else `0`        |
+| `#{pane_at_bottom}` | `1` if no pane below, else `0`        |
 
 ---
 
@@ -312,31 +298,35 @@ export default defineConfig({
   // Status bar
   statusBar: {
     enabled: true,
-    position: "bottom",    // "top" | "bottom"
+    position: "bottom", // "top" | "bottom"
     theme: "catppuccin-mocha", // "catppuccin-mocha" | "dracula" | "nord" |
-                               // "tokyo-night" | "gruvbox" | "one-dark" |
-                               // "solarized" | "custom"
+    // "tokyo-night" | "gruvbox" | "one-dark" |
+    // "solarized" | "custom"
     separator: {
-      style: "powerline",  // "powerline" | "rounded" | "flat" | "arrow" | "slant"
+      style: "powerline", // "powerline" | "rounded" | "flat" | "arrow" | "slant"
     },
-    icons: true,            // Nerd Font icons (requires Nerd Font)
+    icons: true, // Nerd Font icons (requires Nerd Font)
     left: ["session", "windows"],
     right: ["git", "cwd", "datetime"],
-    modules: {},            // Per-module overrides (fg, bg, enabled)
+    modules: {}, // Per-module overrides (fg, bg, enabled)
     refreshInterval: 1000,
     metricsInterval: 5000,
   },
 
   // Session list / picker
   sessionList: {
-    mode: "sidebar",           // "sidebar" | "overlay"
-    sidebarPosition: "left",   // "left" | "right"
-    sidebarWidth: 30,          // 20–80 columns
+    mode: "sidebar", // "sidebar" | "overlay"
+    sidebarPosition: "left", // "left" | "right"
+    sidebarWidth: 30, // 20–80 columns
   },
 
   // Keybindings & global keybindings
-  keybindings: { /* ... */ },
-  globalKeybindings: { /* ... */ },
+  keybindings: {
+    /* ... */
+  },
+  globalKeybindings: {
+    /* ... */
+  },
 
   // Session persistence
   sessions: {
@@ -357,21 +347,21 @@ The config is fully type-safe — your editor provides autocomplete for every op
 
 These modules can be placed in `statusBar.left` or `statusBar.right`:
 
-| Module       | Description                       |
-| ------------ | --------------------------------- |
-| `session`    | Current session name              |
-| `windows`    | Window tabs                       |
-| `datetime`   | Date and time                     |
-| `hostname`   | Machine hostname                  |
-| `user`       | Current user                      |
-| `cwd`        | Working directory of active pane  |
-| `git`        | Git branch                        |
-| `cpu`        | CPU usage                         |
-| `ram`        | Memory usage                      |
-| `battery`    | Battery level                     |
-| `network`    | Network status                    |
-| `prefix`     | Prefix key indicator              |
-| `pane-info`  | Active pane info                  |
+| Module      | Description                      |
+| ----------- | -------------------------------- |
+| `session`   | Current session name             |
+| `windows`   | Window tabs                      |
+| `datetime`  | Date and time                    |
+| `hostname`  | Machine hostname                 |
+| `user`      | Current user                     |
+| `cwd`       | Working directory of active pane |
+| `git`       | Git branch                       |
+| `cpu`       | CPU usage                        |
+| `ram`       | Memory usage                     |
+| `battery`   | Battery level                    |
+| `network`   | Network status                   |
+| `prefix`    | Prefix key indicator             |
+| `pane-info` | Active pane info                 |
 
 ---
 
