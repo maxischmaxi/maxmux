@@ -73,6 +73,7 @@ export function renderList(
   fg?: string,
   selectedFg?: string,
   selectedBg?: string,
+  bg?: string,
 ): string {
   let out = "";
   for (let i = 0; i < items.length; i++) {
@@ -85,6 +86,7 @@ export function renderList(
       out += `> ${items[i]}`;
     } else {
       if (fg) out += ansi.fgHex(fg);
+      if (bg) out += ansi.bgHex(bg);
       out += `  ${items[i]}`;
     }
     out += ansi.resetStyle();

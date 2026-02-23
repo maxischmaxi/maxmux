@@ -6,7 +6,6 @@ import {
   userInfo,
   networkInterfaces,
 } from "node:os";
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import type { SystemMetrics } from "../statusbar/types.ts";
 
@@ -42,16 +41,18 @@ export class MetricsCollector {
 
     // Initial collection
     this.collectFast();
-    this.collectSlow();
     this.notify();
+    this.collectSlow().then(() => this.notify());
 
+    // Single fast timer for CPU/memory
     this.fastTimer = setInterval(() => {
       this.collectFast();
       this.notify();
     }, fastIntervalMs);
 
-    this.slowTimer = setInterval(() => {
-      this.collectSlow();
+    // Slow timer for git etc. — only runs when there are changes to detect
+    this.slowTimer = setInterval(async () => {
+      await this.collectSlow();
       this.notify();
     }, slowIntervalMs);
   }
@@ -67,8 +68,7 @@ export class MetricsCollector {
     if (cwd !== this.currentCwd) {
       this.currentCwd = cwd;
       this.cachedMetrics.cwd = cwd;
-      this.collectGit(cwd);
-      this.notify();
+      this.collectGit(cwd).then(() => this.notify());
     }
   }
 
@@ -90,11 +90,11 @@ export class MetricsCollector {
     this.cachedMetrics.memory = this.collectMemory();
   }
 
-  private collectSlow(): void {
+  private async collectSlow(): Promise<void> {
     this.cachedMetrics.battery = this.collectBattery();
     this.cachedMetrics.network = this.collectNetwork();
     if (this.currentCwd) {
-      this.collectGit(this.currentCwd);
+      await this.collectGit(this.currentCwd);
     }
   }
 
@@ -183,49 +183,58 @@ export class MetricsCollector {
     }
   }
 
-  private collectGit(cwd: string): void {
+  private async runGitCommand(
+    args: string[],
+    cwd: string,
+    timeoutMs = 2000,
+  ): Promise<string | null> {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const timer = setTimeout(() => proc.kill(), timeoutMs);
     try {
-      const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      const output = await proc.stdout.text();
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) return null;
+      return output.trim();
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async collectGit(cwd: string): Promise<void> {
+    try {
+      const branch = await this.runGitCommand(
+        ["rev-parse", "--abbrev-ref", "HEAD"],
         cwd,
-        timeout: 2000,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      );
 
       if (!branch) {
         this.cachedMetrics.git = null;
         return;
       }
 
-      const status = execSync("git status --porcelain", {
-        cwd,
-        timeout: 2000,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      const status = await this.runGitCommand(["status", "--porcelain"], cwd);
 
       let ahead = 0;
       let behind = 0;
-      try {
-        const revList = execSync(
-          "git rev-list --left-right --count HEAD...@{upstream}",
-          {
-            cwd,
-            timeout: 2000,
-            encoding: "utf-8",
-            stdio: ["pipe", "pipe", "pipe"],
-          },
-        ).trim();
+      const revList = await this.runGitCommand(
+        ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+        cwd,
+      );
+      if (revList) {
         const parts = revList.split(/\s+/);
         ahead = parseInt(parts[0] || "0", 10);
         behind = parseInt(parts[1] || "0", 10);
-      } catch {
-        // No upstream
       }
 
       this.cachedMetrics.git = {
         branch,
-        dirty: status.length > 0,
+        dirty: (status?.length ?? 0) > 0,
         ahead: isNaN(ahead) ? 0 : ahead,
         behind: isNaN(behind) ? 0 : behind,
       };

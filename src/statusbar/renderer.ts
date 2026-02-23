@@ -300,7 +300,9 @@ export class StatusBarRenderer {
     return [
       session.id,
       session.name,
-      windows.map((w) => `${w.id}:${w.isActive}`).join(","),
+      windows
+        .map((w) => `${w.id}:${w.name}:${w.paneCount}:${w.isActive}`)
+        .join(","),
       prefixActive,
       cols,
       timeKey,

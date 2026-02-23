@@ -1,16 +1,24 @@
 import * as ansi from "../renderer/ansi.ts";
 import { getBorderChars, type BorderStyle } from "../renderer/border.ts";
 
+export interface SidebarWindowEntry {
+  name: string;
+  index: number;
+  isActive: boolean;
+}
+
 export interface SidebarSessionEntry {
   id: string;
   name: string;
   windowCount: number;
+  windows: SidebarWindowEntry[];
   attached: boolean;
   isActive: boolean;
 }
 
 export interface SessionSidebarState {
   selectedIndex: number;
+  scrollOffset: number;
   sessions: SidebarSessionEntry[];
 }
 
@@ -22,7 +30,7 @@ export function createSessionSidebarState(
     0,
     sessions.findIndex((s) => s.id === activeSessionId),
   );
-  return { selectedIndex, sessions };
+  return { selectedIndex, scrollOffset: 0, sessions };
 }
 
 export function updateSidebarSessions(
@@ -81,24 +89,88 @@ export function renderSessionSidebar(
   out += "─".repeat(contentWidth);
   out += ansi.resetStyle();
 
-  // Session list
-  const listStartY = 2;
-  const maxItems = height - 4; // space for title, separator, bottom hints
-  const scrollOffset = Math.max(0, state.selectedIndex - maxItems + 1);
-  const visibleSessions = state.sessions.slice(
-    scrollOffset,
-    scrollOffset + maxItems,
-  );
+  // Build display rows: each session is 1 row, selected session also shows windows
+  interface DisplayRow {
+    type: "session" | "window";
+    sessionIndex: number;
+    label: string;
+    isSelected: boolean;
+    isActiveWindow?: boolean;
+  }
 
-  for (let i = 0; i < visibleSessions.length; i++) {
-    const session = visibleSessions[i]!;
-    const isSelected = i + scrollOffset === state.selectedIndex;
-    const y = listStartY + i;
+  const displayRows: DisplayRow[] = [];
+  for (let si = 0; si < state.sessions.length; si++) {
+    const session = state.sessions[si]!;
+    const isSelected = si === state.selectedIndex;
     const prefix = isSelected ? "▸ " : "  ";
     const activeMarker = session.isActive ? " *" : "";
     const attachedMarker = session.attached ? " ●" : "";
-    let label = `${prefix}${session.name}${activeMarker}${attachedMarker}`;
+    const label = `${prefix}${session.name}${activeMarker}${attachedMarker}`;
+    displayRows.push({ type: "session", sessionIndex: si, label, isSelected });
 
+    // Show windows only for selected session
+    if (isSelected && session.windows.length > 0) {
+      for (let wi = 0; wi < session.windows.length; wi++) {
+        const w = session.windows[wi]!;
+        const isLast = wi === session.windows.length - 1;
+        const treeChar = isLast ? "└" : "├";
+        const activeW = w.isActive ? " *" : "";
+        const wLabel = `  ${treeChar} ${w.index}:${w.name}${activeW}`;
+        displayRows.push({
+          type: "window",
+          sessionIndex: si,
+          label: wLabel,
+          isSelected: true,
+          isActiveWindow: w.isActive,
+        });
+      }
+    }
+  }
+
+  // Session list with scroll
+  const listStartY = 2;
+  const maxItems = height - 4; // space for title, separator, bottom hints
+
+  // Ensure selected session header + all its windows are visible
+  const selectedFirstRow = displayRows.findIndex(
+    (r) => r.type === "session" && r.sessionIndex === state.selectedIndex,
+  );
+  const selectedLastRow = displayRows.findLastIndex(
+    (r) => r.sessionIndex === state.selectedIndex,
+  );
+
+  // Adjust scroll offset to keep selected block visible
+  if (selectedFirstRow >= 0) {
+    const blockSize = selectedLastRow - selectedFirstRow + 1;
+    if (selectedFirstRow < state.scrollOffset) {
+      state.scrollOffset = selectedFirstRow;
+    } else if (selectedLastRow >= state.scrollOffset + maxItems) {
+      // Try to fit the whole block; if block > maxItems, show from the start
+      if (blockSize <= maxItems) {
+        state.scrollOffset = selectedLastRow - maxItems + 1;
+      } else {
+        state.scrollOffset = selectedFirstRow;
+      }
+    }
+  }
+  state.scrollOffset = Math.max(
+    0,
+    Math.min(state.scrollOffset, displayRows.length - maxItems),
+  );
+  if (state.scrollOffset < 0) state.scrollOffset = 0;
+
+  const visibleRows = displayRows.slice(
+    state.scrollOffset,
+    state.scrollOffset + maxItems,
+  );
+
+  const selectedBg = ansi.bgHex("#313244");
+
+  for (let i = 0; i < visibleRows.length; i++) {
+    const row = visibleRows[i]!;
+    const y = listStartY + i;
+
+    let label = row.label;
     // Truncate if needed
     if (label.length > contentWidth - 1) {
       label = label.slice(0, contentWidth - 4) + "...";
@@ -107,8 +179,15 @@ export function renderSessionSidebar(
     label = label.padEnd(contentWidth);
 
     out += ansi.moveTo(screenX, y);
-    if (isSelected) {
-      out += ansi.bgHex("#313244") + activeFgStr + ansi.bold();
+    if (row.isSelected && row.type === "session") {
+      out += selectedBg + activeFgStr + ansi.bold();
+    } else if (row.isSelected && row.type === "window") {
+      out += selectedBg;
+      if (row.isActiveWindow) {
+        out += activeFgStr + ansi.bold();
+      } else {
+        out += fgStr;
+      }
     } else {
       out += bgStr + fgStr;
     }
@@ -132,6 +211,52 @@ export function renderSessionSidebar(
     out += ansi.moveTo(borderX, y) + borderChars.vertical;
   }
   out += ansi.resetStyle();
+
+  return out;
+}
+
+export function renderPreviewBar(
+  sessionName: string,
+  windows: SidebarWindowEntry[],
+  startX: number,
+  width: number,
+  row: number,
+  theme: { fg: string; bg: string; activeFg: string; borderFg: string },
+): string {
+  const bgStr = ansi.bgHex(theme.bg);
+  const borderFgStr = ansi.fgHex(theme.borderFg);
+  const activeFgStr = ansi.fgHex(theme.activeFg);
+
+  let out = "";
+
+  // Fill background
+  out +=
+    ansi.moveTo(startX, row) + bgStr + " ".repeat(width) + ansi.resetStyle();
+
+  // Label: " ◆ Preview: {name} "
+  const label = ` \u25C6 Preview: ${sessionName} `;
+  out += ansi.moveTo(startX, row) + bgStr + borderFgStr + ansi.italic();
+  out += label.length > width ? label.slice(0, width) : label;
+  out += ansi.resetStyle();
+
+  // Window tabs after the label
+  let x = startX + label.length;
+  const maxX = startX + width;
+
+  for (const w of windows) {
+    const tab = ` ${w.index}:${w.name} `;
+    if (x + tab.length > maxX) break;
+
+    out += ansi.moveTo(x, row) + bgStr;
+    if (w.isActive) {
+      out += activeFgStr + ansi.bold();
+    } else {
+      out += borderFgStr;
+    }
+    out += tab;
+    out += ansi.resetStyle();
+    x += tab.length;
+  }
 
   return out;
 }

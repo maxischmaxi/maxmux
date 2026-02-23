@@ -67,6 +67,7 @@ export function renderCommandPalette(
     "#a6adc8",
     "#cdd6f4",
     "#313244",
+    "#1e1e2e",
   );
 
   return out;

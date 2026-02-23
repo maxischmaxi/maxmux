@@ -1,22 +1,4 @@
 #!/usr/bin/env bun
-import { loadConfig } from "./config/loader.ts";
-import {
-  startServer,
-  startServerDaemon,
-  isServerRunning,
-} from "./server/daemon.ts";
-import { attachToSession } from "./client/attach.ts";
-import {
-  listSessions,
-  killSession,
-  killServer,
-  selectPane,
-  displayMessage,
-  selectWindow,
-  splitWindow,
-  newWindow,
-  remoteCommand,
-} from "./client/cli.ts";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -26,30 +8,74 @@ function getTarget(): string | undefined {
   return idx !== -1 ? args[idx + 1] : undefined;
 }
 
+// Fast path: BEFORE any heavy imports
+// These commands only need cli.ts (lightweight socket communication)
+const fastCommands = [
+  "select-pane",
+  "display-message",
+  "display",
+  "select-window",
+  "split-window",
+  "new-window",
+  "send-command",
+];
+
+if (command && fastCommands.includes(command)) {
+  // Nuclear safety net — SIGKILL guaranteed to work (process.exit doesn't in Bun)
+  const safetyNet = setTimeout(() => {
+    process.kill(process.pid, 9);
+  }, 5000);
+
+  await handleFastCommand(command);
+  clearTimeout(safetyNet);
+  process.exit(0);
+}
+
+// Internal server mode (spawned as daemon) — load config + server
+if (command === "__server__" || process.env.MAXMUX_SERVER === "1") {
+  const { loadConfig, ConfigLoadError } = await import("./config/loader.ts");
+  const { startServer } = await import("./server/daemon.ts");
+  let config;
+  try {
+    config = await loadConfig();
+  } catch (err) {
+    if (err instanceof ConfigLoadError) {
+      console.error("\x1b[1;31mmaxmux: config error\x1b[0m");
+      console.error(`File: ${err.configPath}\n`);
+      console.error(err.formattedMessage);
+      console.error("\nFix the config or delete it to use defaults.");
+    } else {
+      console.error("Failed to load config:", err);
+    }
+    process.exit(1);
+  }
+  await startServer(config);
+} else {
+  // Normal path: load heavy modules only now
+  await main();
+}
+
 async function main() {
-  // Internal server mode (spawned as daemon)
-  if (command === "__server__" || process.env.MAXMUX_SERVER === "1") {
-    const config = await loadConfig();
-    await startServer(config);
-    return;
-  }
+  const { loadConfig, ConfigLoadError } = await import("./config/loader.ts");
+  const { startServerDaemon, isServerRunning } =
+    await import("./server/daemon.ts");
+  const { listSessions, killSession, killServer } =
+    await import("./client/cli.ts");
 
-  // Fast path: remote commands that don't need config loading
-  const fastCommands = [
-    "select-pane",
-    "display-message",
-    "display",
-    "select-window",
-    "split-window",
-    "new-window",
-    "send-command",
-  ];
-  if (command && fastCommands.includes(command)) {
-    await handleFastCommand(command);
-    return;
+  let config;
+  try {
+    config = await loadConfig();
+  } catch (err) {
+    if (err instanceof ConfigLoadError) {
+      console.error("\x1b[1;31mmaxmux: config error\x1b[0m");
+      console.error(`File: ${err.configPath}\n`);
+      console.error(err.formattedMessage);
+      console.error("\nFix the config or delete it to use defaults.");
+    } else {
+      console.error("Failed to load config:", err);
+    }
+    process.exit(1);
   }
-
-  const config = await loadConfig();
 
   switch (command) {
     case "ls":
@@ -62,6 +88,7 @@ async function main() {
       const nameIdx = args.indexOf("-s");
       const name = nameIdx !== -1 ? args[nameIdx + 1] : undefined;
       await startServerDaemon(config);
+      const { attachToSession } = await import("./client/attach.ts");
       await attachToSession(config, name ? `__new__:${name}` : "__new__");
       break;
     }
@@ -75,7 +102,8 @@ async function main() {
         console.error("No server running. Start with: maxmux");
         process.exit(1);
       }
-      await attachToSession(config, target);
+      const { attachToSession: attachFn } = await import("./client/attach.ts");
+      await attachFn(config, target);
       break;
     }
 
@@ -107,18 +135,29 @@ async function main() {
     case "version":
     case "--version":
     case "-v":
-      console.log("maxmux v0.1.0");
+      console.log("maxmux v0.2.0");
       break;
 
-    default:
+    default: {
       // Default: start server (if needed) and attach
       await startServerDaemon(config);
+      const { attachToSession } = await import("./client/attach.ts");
       await attachToSession(config);
       break;
+    }
   }
 }
 
 async function handleFastCommand(cmd: string): Promise<void> {
+  const {
+    selectPane,
+    displayMessage,
+    selectWindow,
+    splitWindow,
+    newWindow,
+    remoteCommand,
+  } = await import("./client/cli.ts");
+
   const target = getTarget();
 
   switch (cmd) {
@@ -236,8 +275,3 @@ Keybindings (after prefix):
 Config: maxmux.config.ts or ~/.config/maxmux/maxmux.config.ts
 `);
 }
-
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});

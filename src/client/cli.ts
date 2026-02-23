@@ -15,26 +15,29 @@ interface RemoteResult {
 }
 
 function sendRemoteCommand(msg: ClientMessage): Promise<RemoteResult> {
-  return new Promise(async (resolve, reject) => {
-    const running = await isServerRunning();
-    if (!running) {
-      reject(new Error("Server is not running. Start with: maxmux"));
-      return;
-    }
-
+  return new Promise((resolve) => {
     const socketPath = getSocketPath();
     const socket = connect(socketPath);
+    socket.unref(); // Don't block event loop before connect
     let buffer = "";
     let done = false;
+
+    // Timer WITHOUT .unref() — this is the safety net that guarantees process exit
+    const timer = setTimeout(() => {
+      finish({ success: false, error: "Timeout waiting for server response" });
+    }, 2000);
 
     const finish = (result: RemoteResult) => {
       if (done) return;
       done = true;
+      clearTimeout(timer);
+      socket.removeAllListeners();
       socket.destroy();
       resolve(result);
     };
 
     socket.on("connect", () => {
+      socket.ref(); // Now ref for data events
       socket.write(JSON.stringify(msg) + "\n");
     });
 
@@ -55,12 +58,13 @@ function sendRemoteCommand(msg: ClientMessage): Promise<RemoteResult> {
       }
     });
 
-    socket.on("error", reject);
+    socket.on("error", (err) => {
+      finish({ success: false, error: err.message });
+    });
 
-    // Fallback timeout
-    setTimeout(() => {
-      finish({ success: false, error: "Timeout waiting for server response" });
-    }, 2000);
+    socket.on("close", () => {
+      finish({ success: false, error: "Connection closed" });
+    });
   });
 }
 

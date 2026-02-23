@@ -1,3 +1,4 @@
+import { readlink } from "node:fs/promises";
 import type { Pane } from "../core/session.ts";
 
 export interface ProcessInfo {
@@ -7,25 +8,50 @@ export interface ProcessInfo {
 
 type GetPanesFn = () => Array<{ paneId: string; pid: number; command: string }>;
 type OnTitleChangeFn = (paneId: string, processName: string) => void;
+type OnCwdChangeFn = (paneId: string, cwd: string) => void;
 
 export class ProcessTracker {
   private interval: ReturnType<typeof setInterval> | null = null;
   private lastProcess: Map<string, string> = new Map();
+  private lastCwd: Map<string, string> = new Map();
+  private onCwdChange: OnCwdChangeFn | null = null;
+  private running = false;
 
   start(
     intervalMs: number,
     getPanes: GetPanesFn,
     onTitleChange: OnTitleChangeFn,
+    onCwdChange?: OnCwdChangeFn,
   ): void {
+    if (onCwdChange) this.onCwdChange = onCwdChange;
+
     this.interval = setInterval(async () => {
-      const panes = getPanes();
-      for (const { paneId, pid, command } of panes) {
-        const name = await this.getForegroundProcess(pid, command);
-        const prev = this.lastProcess.get(paneId);
-        if (name !== prev) {
-          this.lastProcess.set(paneId, name);
-          onTitleChange(paneId, name);
+      if (this.running) return;
+      this.running = true;
+      try {
+        const panes = getPanes();
+        for (const { paneId, pid, command } of panes) {
+          const name = await this.getForegroundProcess(pid, command);
+          const prev = this.lastProcess.get(paneId);
+          if (name !== prev) {
+            this.lastProcess.set(paneId, name);
+            onTitleChange(paneId, name);
+          }
+
+          // Track CWD changes via /proc
+          if (this.onCwdChange) {
+            const cwd = await this.readProcCwd(pid);
+            if (cwd) {
+              const prevCwd = this.lastCwd.get(paneId);
+              if (cwd !== prevCwd) {
+                this.lastCwd.set(paneId, cwd);
+                this.onCwdChange(paneId, cwd);
+              }
+            }
+          }
         }
+      } finally {
+        this.running = false;
       }
     }, intervalMs);
   }
@@ -37,9 +63,14 @@ export class ProcessTracker {
     }
   }
 
+  getProcessName(paneId: string): string | undefined {
+    return this.lastProcess.get(paneId);
+  }
+
   removePanes(ids: string[]): void {
     for (const id of ids) {
       this.lastProcess.delete(id);
+      this.lastCwd.delete(id);
     }
   }
 
@@ -77,5 +108,13 @@ export class ProcessTracker {
     // Extract basename from shell path like /usr/bin/zsh → zsh
     const parts = command.split("/");
     return parts[parts.length - 1] || command;
+  }
+
+  private async readProcCwd(pid: number): Promise<string | null> {
+    try {
+      return await readlink(`/proc/${pid}/cwd`);
+    } catch {
+      return null;
+    }
   }
 }

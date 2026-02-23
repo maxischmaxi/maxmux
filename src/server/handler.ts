@@ -1,6 +1,7 @@
 import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { debugLog } from "../debug.ts";
 import {
   SessionManager,
@@ -35,6 +36,7 @@ import {
 } from "../persistence/store.ts";
 import { MetricsCollector } from "./metrics.ts";
 import { ProcessTracker } from "./process-tracker.ts";
+import { ConfigWatcher } from "../config/watcher.ts";
 import type { WindowTitleInfo } from "../plugins/types.ts";
 
 export type ClientMessage =
@@ -65,14 +67,18 @@ export class ServerHandler {
   private clientRows: Map<string, number> = new Map();
   private clientCwd: Map<string, string> = new Map();
   private paneOutputBuffer: Map<string, string> = new Map();
-  private static readonly OUTPUT_BUFFER_MAX = 64 * 1024; // 64KB per pane
+  private static readonly OUTPUT_BUFFER_MAX = 512 * 1024; // 512KB per pane
   private lastSessionId: string | null = null;
   private autoSaver: AutoSaver | null = null;
+  private focusSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private metricsCollector: MetricsCollector;
   private processTracker: ProcessTracker;
+  private configWatcher: ConfigWatcher | null = null;
+  private configPath: string | null;
 
-  constructor(config: MaxMuxConfig) {
+  constructor(config: MaxMuxConfig, configPath?: string | null) {
     this.config = config;
+    this.configPath = configPath ?? null;
     this.sessions = new SessionManager();
     this.ptys = new PtyManager();
     this.terminals = new TerminalManager();
@@ -92,11 +98,19 @@ export class ServerHandler {
     await loadPlugins(this.config, this.commands, this.keybindings, this.hooks);
 
     // Restore sessions from disk
+    const sessionIdMap = new Map<string, string>();
     if (this.config.sessions.autoRestore) {
       const saved = await loadSavedSessions(this.config.sessions.savePath);
       for (const s of saved) {
-        this.restoreSession(s);
+        const { oldId, newId } = this.restoreSession(s);
+        sessionIdMap.set(oldId, newId);
       }
+    }
+
+    // Restore last active session ID, remapping old→new if needed
+    this.lastSessionId = await this.loadLastSessionId();
+    if (this.lastSessionId && sessionIdMap.has(this.lastSessionId)) {
+      this.lastSessionId = sessionIdMap.get(this.lastSessionId)!;
     }
 
     // Start auto-save
@@ -109,7 +123,7 @@ export class ServerHandler {
       this.autoSaver.start();
     }
 
-    // Start process tracker for dynamic window titles
+    // Start process tracker for dynamic window titles + CWD tracking
     if (this.config.automaticRename) {
       this.processTracker.start(
         this.config.automaticRenameInterval,
@@ -132,18 +146,109 @@ export class ServerHandler {
         (paneId, processName) => {
           this.handleProcessChange(paneId, processName);
         },
+        (paneId, cwd) => {
+          this.handlePaneCwdChange(paneId, cwd);
+        },
       );
     }
 
     // Start metrics collection
     const metricsInterval = this.config.statusBar.metricsInterval;
     this.metricsCollector.start(
-      2000,
-      Math.max(metricsInterval, 5000),
+      5000,
+      Math.max(metricsInterval, 30000),
       (metrics) => {
         this.broadcaster.broadcast({ type: "metrics", data: metrics });
       },
     );
+
+    // Start config watcher for live reload
+    this.configWatcher = new ConfigWatcher(
+      this.configPath,
+      (newConfig) => {
+        debugLog("server", "config reloaded successfully");
+        this.applyConfig(newConfig);
+      },
+      (errorMessage) => {
+        debugLog("server", `config reload failed: ${errorMessage}`);
+      },
+    );
+    this.configWatcher.start();
+  }
+
+  private applyConfig(newConfig: MaxMuxConfig): void {
+    const oldConfig = this.config;
+    this.config = newConfig;
+
+    // Restart AutoSaver if interval changed
+    if (
+      oldConfig.sessions.autoSaveInterval !==
+      newConfig.sessions.autoSaveInterval
+    ) {
+      if (this.autoSaver) {
+        this.autoSaver.stop();
+      }
+      if (newConfig.sessions.autoSave) {
+        this.autoSaver = new AutoSaver(
+          this.sessions,
+          newConfig.sessions.autoSaveInterval,
+          newConfig.sessions.savePath,
+        );
+        this.autoSaver.start();
+      }
+    }
+
+    // Restart ProcessTracker if interval changed
+    if (
+      oldConfig.automaticRenameInterval !== newConfig.automaticRenameInterval
+    ) {
+      this.processTracker.stop();
+      if (newConfig.automaticRename) {
+        this.processTracker.start(
+          newConfig.automaticRenameInterval,
+          () => {
+            const panes: Array<{
+              paneId: string;
+              pid: number;
+              command: string;
+            }> = [];
+            for (const session of this.sessions.listSessions()) {
+              for (const window of session.windows) {
+                for (const pane of window.panes) {
+                  panes.push({
+                    paneId: pane.id,
+                    pid: pane.pid,
+                    command: pane.command,
+                  });
+                }
+              }
+            }
+            return panes;
+          },
+          (paneId, processName) => {
+            this.handleProcessChange(paneId, processName);
+          },
+          (paneId, cwd) => {
+            this.handlePaneCwdChange(paneId, cwd);
+          },
+        );
+      }
+    }
+
+    // Restart MetricsCollector if interval changed
+    if (
+      oldConfig.statusBar.metricsInterval !==
+      newConfig.statusBar.metricsInterval
+    ) {
+      this.metricsCollector.stop();
+      this.metricsCollector.start(
+        5000,
+        Math.max(newConfig.statusBar.metricsInterval, 30000),
+        (metrics) => {
+          this.broadcaster.broadcast({ type: "metrics", data: metrics });
+        },
+      );
+    }
   }
 
   handleConnection(socket: Socket): string {
@@ -155,12 +260,15 @@ export class ServerHandler {
   handleDisconnect(clientId: string): void {
     const sessionId = this.broadcaster.getClientSession(clientId);
     if (sessionId) {
+      this.lastSessionId = sessionId;
       const session = this.sessions.getSession(sessionId);
       if (session) {
         session.attachedClients = session.attachedClients.filter(
           (c) => c !== clientId,
         );
       }
+      this.persistLastSessionId(sessionId);
+      this.saveImmediate();
     }
     this.broadcaster.removeClient(clientId); // also clears preview state
     this.clientCols.delete(clientId);
@@ -223,6 +331,8 @@ export class ServerHandler {
 
     session.attachedClients.push(clientId);
     this.broadcaster.setClientSession(clientId, session.id);
+    this.lastSessionId = session.id;
+    this.persistLastSessionId(session.id);
 
     // If session has no windows, create one
     // Skip broadcast — sendStateToClient below will send everything
@@ -272,6 +382,8 @@ export class ServerHandler {
           (c) => c !== clientId,
         );
       }
+      this.persistLastSessionId(sessionId);
+      this.saveImmediate();
     }
     this.broadcaster.send(clientId, { type: "error", message: "detached" });
   }
@@ -300,14 +412,22 @@ export class ServerHandler {
       height: rows - 1, // -1 for status bar
     });
 
+    // 1. Server-VTs resizen (damit eingehender Output korrekt verarbeitet wird)
+    for (const [paneId, rect] of paneRects) {
+      const paneRows = Math.max(1, rect.height);
+      const paneCols = Math.max(1, rect.width);
+      this.terminals.resize(paneId, paneCols, paneRows);
+    }
+
+    // 2. Layout an Client senden (Client kann seine VTs sofort resizen)
+    this.sendLayoutToClient(clientId, window.layout, paneRects);
+
+    // 3. PTYs resizen (SIGWINCH triggert Child-Redraw → Output kommt danach)
     for (const [paneId, rect] of paneRects) {
       const paneRows = Math.max(1, rect.height);
       const paneCols = Math.max(1, rect.width);
       this.ptys.resize(paneId, paneCols, paneRows);
-      this.terminals.resize(paneId, paneCols, paneRows);
     }
-
-    this.sendLayoutToClient(clientId, window.layout, paneRects);
   }
 
   private handleCommand(
@@ -498,7 +618,12 @@ export class ServerHandler {
     );
 
     // Create virtual terminal
-    const serverTerm = this.terminals.create(paneId, safeCols, safeRows);
+    const serverTerm = this.terminals.create(
+      paneId,
+      safeCols,
+      safeRows,
+      this.config.historyLimit,
+    );
 
     // Forward terminal query responses (DA, DSR, etc.) back to the PTY
     // so programs like fzf that query terminal capabilities get a reply
@@ -522,13 +647,14 @@ export class ServerHandler {
         this.terminals.write(paneId, data);
         // Append to output ring buffer
         const existing = this.paneOutputBuffer.get(paneId) || "";
-        let combined = existing + data;
-        if (combined.length > ServerHandler.OUTPUT_BUFFER_MAX) {
-          combined = combined.slice(
-            combined.length - ServerHandler.OUTPUT_BUFFER_MAX,
-          );
-        }
-        this.paneOutputBuffer.set(paneId, combined);
+        const combined = existing + data;
+        this.paneOutputBuffer.set(
+          paneId,
+          ServerHandler.safeTruncateBuffer(
+            combined,
+            ServerHandler.OUTPUT_BUFFER_MAX,
+          ),
+        );
         // Forward output to clients
         this.broadcaster.sendToSession(sessionId, {
           type: "output",
@@ -543,6 +669,12 @@ export class ServerHandler {
         });
       },
       (exitCode: number) => {
+        // Capture pane before removal for the hook
+        const session = this.sessions.getSession(sessionId);
+        const closedPane = session?.windows
+          .find((w) => w.id === windowId)
+          ?.panes.find((p) => p.id === paneId);
+
         this.terminals.remove(paneId);
         this.paneOutputBuffer.delete(paneId);
         this.processTracker.removePanes([paneId]);
@@ -556,6 +688,10 @@ export class ServerHandler {
           }
         }
 
+        if (closedPane) {
+          this.hooks.emit("pane:closed", closedPane);
+        }
+
         this.broadcaster.sendToSession(sessionId, {
           type: "pane:exited",
           paneId,
@@ -563,7 +699,6 @@ export class ServerHandler {
         });
 
         // If window has no panes left, remove it
-        const session = this.sessions.getSession(sessionId);
         if (session) {
           const w = session.windows.find((w) => w.id === windowId);
           if (w && w.panes.length === 0) {
@@ -582,6 +717,9 @@ export class ServerHandler {
                 return;
               }
             }
+          } else if (w) {
+            // Window still has panes — update title to reflect remaining panes
+            this.updateWindowTitle(session, w);
           }
         }
 
@@ -591,12 +729,13 @@ export class ServerHandler {
     );
 
     // Add pane to session tree
+    const shellName = this.config.shell.split("/").pop() || this.config.shell;
     const pane: Pane = {
       id: paneId,
       pid: this.ptys.getPid(paneId) || 0,
       cwd,
       command: this.config.shell,
-      title: this.config.shell,
+      title: shellName,
     };
     this.sessions.addPaneToWindow(sessionId, windowId, pane);
     this.hooks.emit("pane:created", pane);
@@ -610,12 +749,45 @@ export class ServerHandler {
     });
   }
 
-  private restoreSession(data: SerializedSession): void {
+  private scheduleFocusSave(): void {
+    if (this.focusSaveTimer) clearTimeout(this.focusSaveTimer);
+    this.focusSaveTimer = setTimeout(() => {
+      this.saveImmediate();
+      this.focusSaveTimer = null;
+    }, 2000);
+  }
+
+  private async persistLastSessionId(sessionId: string): Promise<void> {
+    try {
+      const filePath = join(homedir(), ".maxmux", "last-session");
+      await Bun.write(filePath, sessionId);
+    } catch {}
+  }
+
+  private async loadLastSessionId(): Promise<string | null> {
+    try {
+      const filePath = join(homedir(), ".maxmux", "last-session");
+      const file = Bun.file(filePath);
+      if (await file.exists()) {
+        const content = await file.text();
+        return content.trim() || null;
+      }
+    } catch {}
+    return null;
+  }
+
+  private restoreSession(data: SerializedSession): {
+    oldId: string;
+    newId: string;
+  } {
     const session = this.sessions.createSession(data.name);
+    const windowIdMap = new Map<string, string>();
 
     for (const wData of data.windows) {
       const window = this.sessions.addWindow(session.id, wData.name);
       if (!window) continue;
+
+      windowIdMap.set(wData.id, window.id);
 
       const oldToNew = new Map<string, string>();
       const oldPaneIds = getAllPaneIdsFromSerialized(wData.layout);
@@ -650,9 +822,13 @@ export class ServerHandler {
       }
     }
 
-    if (session.windows.length > 0) {
+    if (data.activeWindow && windowIdMap.has(data.activeWindow)) {
+      session.activeWindow = windowIdMap.get(data.activeWindow)!;
+    } else if (session.windows.length > 0) {
       session.activeWindow = session.windows[0]!.id;
     }
+
+    return { oldId: data.id, newId: session.id };
   }
 
   private registerDefaultCommands(): void {
@@ -689,6 +865,7 @@ export class ServerHandler {
       execute: (ctx) => {
         this.sessions.switchWindow(ctx.sessionId, "next");
         this.broadcastState(ctx.sessionId, true);
+        this.scheduleFocusSave();
       },
     });
 
@@ -698,6 +875,7 @@ export class ServerHandler {
       execute: (ctx) => {
         this.sessions.switchWindow(ctx.sessionId, "previous");
         this.broadcastState(ctx.sessionId, true);
+        this.scheduleFocusSave();
       },
     });
 
@@ -759,6 +937,7 @@ export class ServerHandler {
       execute: (ctx) => {
         this.sessions.switchPane(ctx.sessionId, "next");
         this.broadcastState(ctx.sessionId);
+        this.scheduleFocusSave();
       },
     });
 
@@ -767,8 +946,16 @@ export class ServerHandler {
       description: "Close current pane",
       execute: (ctx) => {
         if (!ctx.paneId || !ctx.windowId) return;
+
+        // Capture pane before removal for the hook
+        const closedPane = this.sessions
+          .getActiveWindow(ctx.sessionId)
+          ?.panes.find((p) => p.id === ctx.paneId);
+
         this.ptys.kill(ctx.paneId);
         this.terminals.remove(ctx.paneId);
+        this.paneOutputBuffer.delete(ctx.paneId);
+        this.processTracker.removePanes([ctx.paneId]);
 
         const window = this.sessions.getActiveWindow(ctx.sessionId);
         if (window) {
@@ -782,8 +969,34 @@ export class ServerHandler {
             ctx.paneId,
           );
 
+          if (closedPane) {
+            this.hooks.emit("pane:closed", closedPane);
+          }
+
           if (window.panes.length === 0) {
             this.sessions.removeWindow(ctx.sessionId, ctx.windowId);
+            this.hooks.emit("window:closed", window);
+
+            const session = this.sessions.getSession(ctx.sessionId);
+            if (session && session.windows.length === 0) {
+              this.hooks.emit("session:closed", session);
+              const fallbackId = this.migrateClientsFromEmptySession(
+                ctx.sessionId,
+              );
+              this.sessions.deleteSession(ctx.sessionId);
+
+              if (fallbackId) {
+                this.broadcastState(fallbackId, true);
+                this.saveImmediate();
+                return;
+              }
+            }
+          } else {
+            // Window still has panes — update title to reflect remaining panes
+            const session = this.sessions.getSession(ctx.sessionId);
+            if (session) {
+              this.updateWindowTitle(session, window);
+            }
           }
         }
 
@@ -858,6 +1071,7 @@ export class ServerHandler {
         if (paneId && ctx.sessionId) {
           this.sessions.setActivePane(ctx.sessionId, paneId);
           this.broadcastState(ctx.sessionId);
+          this.scheduleFocusSave();
         }
       },
     });
@@ -969,6 +1183,13 @@ export class ServerHandler {
     this.spawnPaneProcess(sessionId, window.id, newPaneId, newCols, newRows);
 
     window.activePane = newPaneId;
+
+    // Update window title immediately to include the new pane
+    const session = this.sessions.getSession(sessionId);
+    if (session) {
+      this.updateWindowTitle(session, window);
+    }
+
     this.broadcastState(sessionId);
     this.saveImmediate();
   }
@@ -1022,6 +1243,20 @@ export class ServerHandler {
         paneRects: rectsObj,
       });
 
+      // Force-resize PTYs and server VirtualTerminals to match client dimensions.
+      // Uses forceResize to bypass dedup — even if dimensions haven't changed,
+      // the SIGWINCH is needed so full-screen apps (vim, neovim) redraw after
+      // a window switch. Without this, only the ring buffer replay is shown,
+      // which may be incomplete (incremental updates, truncated escape sequences).
+      if (replay) {
+        for (const [paneId, rect] of paneRects) {
+          const paneCols = Math.max(1, rect.width);
+          const paneRows = Math.max(1, rect.height);
+          this.ptys.forceResize(paneId, paneCols, paneRows);
+          this.terminals.resize(paneId, paneCols, paneRows);
+        }
+      }
+
       // Replay buffered output for all panes in the active window
       // so that window switches restore visible terminal content.
       // Skip replay for pure state updates (e.g. pane:focus) to avoid
@@ -1037,6 +1272,72 @@ export class ServerHandler {
             });
           }
         }
+
+        // Send server VT screen snapshot as authoritative visual state.
+        // The buffer replay above may be truncated (ring buffer overflow),
+        // producing corrupted/incomplete screen content on the client.
+        // The snapshot overwrites it with the correct state from the
+        // server-side VirtualTerminals, which always have the full picture.
+        //
+        // The buffer replay may have set terminal state (scroll regions,
+        // origin mode) that would make CUP commands position relative to the
+        // scroll region instead of absolute. Reset these first.
+        for (const pane of window.panes) {
+          const serverTerm = this.terminals.get(pane.id);
+          if (!serverTerm) continue;
+
+          // Reset origin mode + scroll region so CUP uses absolute coords,
+          // then write each row at its absolute position.
+          let snapshot = "\x1b[?6l\x1b[r";
+          const termRows = serverTerm.getRows();
+          for (let y = 0; y < termRows; y++) {
+            snapshot += `\x1b[${y + 1};1H` + serverTerm.renderLine(y);
+          }
+          // Restore cursor position
+          snapshot += `\x1b[${serverTerm.getCursorY() + 1};${serverTerm.getCursorX() + 1}H`;
+
+          this.broadcaster.send(clientId, {
+            type: "output",
+            paneId: pane.id,
+            data: snapshot,
+          });
+        }
+      }
+
+      // Send authoritative cursor state from server-side VirtualTerminals.
+      // The output ring buffer may have evicted the cursor-hide/style escape
+      // sequences, so the client cannot reconstruct this from replay alone.
+      const cursorStates: Record<
+        string,
+        { cursorVisible: boolean; cursorStyle: number }
+      > = {};
+      for (const pane of window.panes) {
+        const term = this.terminals.get(pane.id);
+        if (term) {
+          cursorStates[pane.id] = {
+            cursorVisible: term.isCursorVisible(),
+            cursorStyle: term.getCursorStyle(),
+          };
+        }
+      }
+      this.broadcaster.send(clientId, {
+        type: "cursor-state",
+        panes: cursorStates,
+      });
+
+      // Send current process info for all panes in the active window
+      const processInfoPanes: Record<string, string> = {};
+      for (const pane of window.panes) {
+        const procName = this.processTracker.getProcessName(pane.id);
+        if (procName) {
+          processInfoPanes[pane.id] = procName;
+        }
+      }
+      if (Object.keys(processInfoPanes).length > 0) {
+        this.broadcaster.send(clientId, {
+          type: "process-info",
+          panes: processInfoPanes,
+        });
       }
     }
 
@@ -1068,6 +1369,29 @@ export class ServerHandler {
     }
   }
 
+  private updateWindowTitle(session: Session, window: Window): void {
+    if (!this.config.automaticRename) return;
+
+    const processes = window.panes.map((p) => ({
+      paneId: p.id,
+      name: p.title,
+    }));
+    const defaultTitle = processes.map((p) => p.name).join(", ");
+
+    // Run through plugin waterfall
+    const info: WindowTitleInfo = {
+      windowId: window.id,
+      title: defaultTitle,
+      processes,
+    };
+    const result = this.hooks.emitWaterfall("window:title", info);
+
+    if (window.name !== result.title) {
+      window.name = result.title;
+      this.broadcastState(session.id);
+    }
+  }
+
   private handleProcessChange(paneId: string, processName: string): void {
     // Find which session/window this pane belongs to
     for (const session of this.sessions.listSessions()) {
@@ -1078,27 +1402,28 @@ export class ServerHandler {
         // Update pane title
         pane.title = processName;
 
-        // Build default window title from all pane processes
-        const processes = window.panes.map((p) => ({
-          paneId: p.id,
-          name: p.title,
-        }));
-        const defaultTitle = processes.map((p) => p.name).join(", ");
+        // Send process-info to all clients of this session
+        const processInfo: Record<string, string> = {};
+        processInfo[paneId] = processName;
+        this.broadcaster.sendToSession(session.id, {
+          type: "process-info",
+          panes: processInfo,
+        });
 
-        // Run through plugin waterfall
-        const info: WindowTitleInfo = {
-          windowId: window.id,
-          title: defaultTitle,
-          processes,
-        };
-        const result = this.hooks.emitWaterfall("window:title", info);
-
-        // Only broadcast if title actually changed
-        if (window.name !== result.title) {
-          window.name = result.title;
-          this.broadcastState(session.id);
-        }
+        this.updateWindowTitle(session, window);
         return;
+      }
+    }
+  }
+
+  private handlePaneCwdChange(paneId: string, cwd: string): void {
+    for (const session of this.sessions.listSessions()) {
+      for (const window of session.windows) {
+        const pane = window.panes.find((p) => p.id === paneId);
+        if (pane) {
+          pane.cwd = cwd;
+          return;
+        }
       }
     }
   }
@@ -1131,10 +1456,19 @@ export class ServerHandler {
     const clients = this.broadcaster.getSessionClients(sessionId);
     if (clients.length === 0) return null;
 
-    // Find a fallback session (any session that isn't the one being deleted)
-    const fallback = this.sessions
-      .listSessions()
-      .find((s) => s.id !== sessionId && s.windows.length > 0);
+    // Prefer lastSessionId (the previously active session), then first available
+    let fallback: Session | undefined;
+    if (this.lastSessionId && this.lastSessionId !== sessionId) {
+      const prev = this.sessions.getSession(this.lastSessionId);
+      if (prev && prev.windows.length > 0) {
+        fallback = prev;
+      }
+    }
+    if (!fallback) {
+      fallback = this.sessions
+        .listSessions()
+        .find((s) => s.id !== sessionId && s.windows.length > 0);
+    }
 
     if (!fallback) return null;
 
@@ -1503,13 +1837,64 @@ export class ServerHandler {
     }
   }
 
+  /**
+   * Truncate buffer to maxSize without cutting inside an ANSI escape sequence.
+   * Scans forward from the cut point to find the next ESC (0x1b) boundary.
+   */
+  private static safeTruncateBuffer(buffer: string, maxSize: number): string {
+    if (buffer.length <= maxSize) return buffer;
+    let cutPoint = buffer.length - maxSize;
+    // Scan forward to find next ESC (start of a new escape sequence)
+    const scanLimit = Math.min(cutPoint + 512, buffer.length);
+    for (let i = cutPoint; i < scanLimit; i++) {
+      if (buffer.charCodeAt(i) === 0x1b) {
+        return buffer.slice(i);
+      }
+    }
+    // No ESC found within scan window — we're in plain text, cut is safe
+    return buffer.slice(cutPoint);
+  }
+
   shutdown(): void {
+    if (this.configWatcher) {
+      this.configWatcher.stop();
+      this.configWatcher = null;
+    }
     this.processTracker.stop();
     this.metricsCollector.stop();
+    if (this.focusSaveTimer) {
+      clearTimeout(this.focusSaveTimer);
+      this.focusSaveTimer = null;
+    }
     if (this.autoSaver) {
       this.autoSaver.stop();
-      this.autoSaver.saveNow();
     }
+
+    // Always save state before killing PTYs, even if autoSave is disabled
+    try {
+      const { writeFileSync, mkdirSync, existsSync } =
+        require("node:fs") as typeof import("node:fs");
+      const savePath = this.config.sessions.savePath.replace(/^~/, homedir());
+      if (!existsSync(savePath)) {
+        mkdirSync(savePath, { recursive: true });
+      }
+      const data = serializeSessions(this.sessions);
+      writeFileSync(
+        join(savePath, "sessions.json"),
+        JSON.stringify(data, null, 2),
+      );
+
+      if (this.lastSessionId) {
+        writeFileSync(
+          join(homedir(), ".maxmux", "last-session"),
+          this.lastSessionId,
+        );
+      }
+      debugLog("server", "shutdown: state saved to disk");
+    } catch (err) {
+      debugLog("server", `shutdown: failed to save state: ${err}`);
+    }
+
     this.broadcaster.notifyShutdown();
     this.ptys.killAll();
     this.terminals.removeAll();

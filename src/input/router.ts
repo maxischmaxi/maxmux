@@ -37,6 +37,13 @@ function parseKeyName(data: Buffer): string | null {
     }
   }
 
+  // Alt/Meta combinations: ESC + printable byte
+  if (data.length === 2 && data[0] === 0x1b) {
+    const byte = data[1]!;
+    if (byte === 0x20) return "M-Space";
+    if (byte >= 33 && byte < 127) return `M-${String.fromCharCode(byte)}`;
+  }
+
   // Single printable character
   if (data.length === 1) {
     const byte = data[0]!;
@@ -72,8 +79,24 @@ function parseGlobalKeyName(data: Buffer): string | null {
     }
   }
 
+  // Alt/Meta combinations: ESC + byte
+  if (data.length === 2 && data[0] === 0x1b) {
+    const byte = data[1]!;
+    // Alt+Ctrl: ESC + 0x01-0x1a → M-C-a..M-C-z
+    if (byte >= 1 && byte <= 26) {
+      return `M-C-${String.fromCharCode(byte + 96)}`;
+    }
+    if (byte === 0x20) return "M-Space";
+    if (byte >= 33 && byte < 127) return `M-${String.fromCharCode(byte)}`;
+  }
+
   if (data.length === 1) {
     const byte = data[0]!;
+
+    // Ctrl+Space: 0x00 (NUL)
+    if (byte === 0) {
+      return "C-Space";
+    }
 
     // Ctrl combinations: 0x01 (C-a) through 0x1a (C-z), skip 0x1b (Escape)
     if (byte >= 1 && byte <= 26) {
@@ -97,6 +120,7 @@ export class InputRouter {
   private keybindings: KeybindingRegistry;
   private globalKeybindings: KeybindingRegistry;
   private onAction: (action: InputAction) => void;
+  private getActivePaneProcess: () => string | undefined;
 
   constructor(
     prefixKey: string,
@@ -104,12 +128,14 @@ export class InputRouter {
     keybindings: KeybindingRegistry,
     globalKeybindings: KeybindingRegistry,
     onAction: (action: InputAction) => void,
+    getActivePaneProcess: () => string | undefined = () => undefined,
   ) {
     this.prefixByte = parsePrefixKey(prefixKey);
     this.prefixTimeout = prefixTimeout;
     this.keybindings = keybindings;
     this.globalKeybindings = globalKeybindings;
     this.onAction = onAction;
+    this.getActivePaneProcess = getActivePaneProcess;
   }
 
   handleInput(data: Buffer): void {
@@ -126,7 +152,10 @@ export class InputRouter {
       const keyName = parseKeyName(data);
 
       if (keyName) {
-        const commandId = this.keybindings.get(keyName);
+        const commandId = this.keybindings.resolve(
+          keyName,
+          this.getActivePaneProcess(),
+        );
         if (commandId) {
           this.onAction({ type: "command", commandId });
           return;
@@ -162,7 +191,10 @@ export class InputRouter {
     // Check global keybindings (no prefix required)
     const globalKeyName = parseGlobalKeyName(data);
     if (globalKeyName) {
-      const commandId = this.globalKeybindings.get(globalKeyName);
+      const commandId = this.globalKeybindings.resolve(
+        globalKeyName,
+        this.getActivePaneProcess(),
+      );
       if (commandId) {
         this.onAction({ type: "command", commandId });
         return;
@@ -182,6 +214,15 @@ export class InputRouter {
 
   isPrefixActive(): boolean {
     return this.prefixMode;
+  }
+
+  updateConfig(prefixKey: string, prefixTimeout: number): void {
+    this.prefixByte = parsePrefixKey(prefixKey);
+    this.prefixTimeout = prefixTimeout;
+    if (this.prefixMode) {
+      this.clearPrefixTimer();
+      this.prefixMode = false;
+    }
   }
 
   destroy(): void {

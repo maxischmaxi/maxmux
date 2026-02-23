@@ -20,9 +20,14 @@ export class VirtualTerminal {
   private _cursorStyle: number = 0; // 0 = default (block)
   private _cursorVisible: boolean = true; // DECTCEM: true = visible
 
-  constructor(id: string, cols: number, rows: number) {
+  constructor(id: string, cols: number, rows: number, scrollback?: number) {
     this.id = id;
-    this.terminal = new Terminal({ cols, rows, allowProposedApi: true });
+    this.terminal = new Terminal({
+      cols,
+      rows,
+      scrollback: scrollback ?? 1000,
+      allowProposedApi: true,
+    });
   }
 
   write(data: string, onProcessed?: () => void): void {
@@ -50,6 +55,19 @@ export class VirtualTerminal {
     return this._cursorVisible;
   }
 
+  /** Check if the application in this terminal has enabled mouse tracking */
+  isMouseTrackingActive(): boolean {
+    return this.terminal.modes.mouseTrackingMode !== "none";
+  }
+
+  setCursorVisible(visible: boolean): void {
+    this._cursorVisible = visible;
+  }
+
+  setCursorStyle(style: number): void {
+    this._cursorStyle = style;
+  }
+
   onWriteParsed(listener: () => void): { dispose: () => void } {
     return this.terminal.onWriteParsed(listener);
   }
@@ -67,6 +85,42 @@ export class VirtualTerminal {
     const line = buffer.getLine(buffer.baseY + row);
     if (!line) return "";
     return line.translateToString(true);
+  }
+
+  getCellChar(row: number, col: number): string {
+    const buffer = this.terminal.buffer.active;
+    const line = buffer.getLine(buffer.baseY + row);
+    if (!line) return " ";
+    const cell = line.getCell(col);
+    if (!cell) return " ";
+    return cell.getChars() || " ";
+  }
+
+  getTextRange(
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+  ): string {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    for (let row = startRow; row <= endRow; row++) {
+      const line = buffer.getLine(buffer.baseY + row);
+      if (!line) {
+        lines.push("");
+        continue;
+      }
+      if (startRow === endRow) {
+        lines.push(line.translateToString(true, startCol, endCol + 1));
+      } else if (row === startRow) {
+        lines.push(line.translateToString(true, startCol));
+      } else if (row === endRow) {
+        lines.push(line.translateToString(true, 0, endCol + 1));
+      } else {
+        lines.push(line.translateToString(true));
+      }
+    }
+    return lines.join("\n");
   }
 
   getCursorX(): number {
@@ -186,18 +240,31 @@ export class VirtualTerminal {
     return lines;
   }
 
-  /**
-   * Render a line as ANSI-escaped string with colors and attributes.
-   * Only emits style changes when they differ from the previous cell.
-   */
-  renderLine(row: number): string {
+  // --- Buffer access methods for copy-mode (absolute indices) ---
+
+  /** Total number of lines in the active buffer (scrollback + viewport) */
+  getBufferLength(): number {
+    return this.terminal.buffer.active.length;
+  }
+
+  /** Number of lines scrolled off the top (scrollback lines above viewport) */
+  getBaseY(): number {
+    return this.terminal.buffer.active.baseY;
+  }
+
+  /** Render a line by absolute buffer index (0 = first scrollback line).
+   * When `forceDim` is true, the SGR dim attribute (2m) is injected after
+   * every internal SGR reset so that the entire line appears dimmed. */
+  renderBufferLine(absoluteRow: number, forceDim = false): string {
     const buffer = this.terminal.buffer.active;
-    const line = buffer.getLine(buffer.baseY + row);
-    if (!line) return "\x1b[0m" + " ".repeat(this.terminal.cols);
+    const line = buffer.getLine(absoluteRow);
+    const dimSeq = forceDim ? "\x1b[2m" : "";
+    if (!line)
+      return "\x1b[0m" + dimSeq + " ".repeat(this.terminal.cols) + "\x1b[0m";
 
     const CM_RGB = 0x03000000;
 
-    let out = "\x1b[0m";
+    let out = "\x1b[0m" + dimSeq;
     let pFgM = -1,
       pFgC = -1,
       pBgM = -1,
@@ -238,7 +305,7 @@ export class VirtualTerminal {
         ul !== pUl ||
         inv !== pIn
       ) {
-        out += "\x1b[0m";
+        out += "\x1b[0m" + dimSeq;
         if (bo) out += "\x1b[1m";
         if (di) out += "\x1b[2m";
         if (it) out += "\x1b[3m";
@@ -275,6 +342,62 @@ export class VirtualTerminal {
     return out;
   }
 
+  /** Get character at absolute buffer position */
+  getBufferCellChar(absoluteRow: number, col: number): string {
+    const buffer = this.terminal.buffer.active;
+    const line = buffer.getLine(absoluteRow);
+    if (!line) return " ";
+    const cell = line.getCell(col);
+    if (!cell) return " ";
+    return cell.getChars() || " ";
+  }
+
+  /** Get full text of a line by absolute buffer index */
+  getBufferLineText(absoluteRow: number): string {
+    const buffer = this.terminal.buffer.active;
+    const line = buffer.getLine(absoluteRow);
+    if (!line) return "";
+    return line.translateToString(true);
+  }
+
+  /** Get text range using absolute buffer indices */
+  getBufferTextRange(
+    startAbsRow: number,
+    startCol: number,
+    endAbsRow: number,
+    endCol: number,
+  ): string {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    for (let row = startAbsRow; row <= endAbsRow; row++) {
+      const line = buffer.getLine(row);
+      if (!line) {
+        lines.push("");
+        continue;
+      }
+      if (startAbsRow === endAbsRow) {
+        lines.push(line.translateToString(true, startCol, endCol + 1));
+      } else if (row === startAbsRow) {
+        lines.push(line.translateToString(true, startCol));
+      } else if (row === endAbsRow) {
+        lines.push(line.translateToString(true, 0, endCol + 1));
+      } else {
+        lines.push(line.translateToString(true));
+      }
+    }
+    return lines.join("\n");
+  }
+
+  /**
+   * Render a line as ANSI-escaped string with colors and attributes.
+   * Only emits style changes when they differ from the previous cell.
+   * When `forceDim` is true, the entire line is rendered with SGR dim.
+   */
+  renderLine(row: number, forceDim = false): string {
+    const buffer = this.terminal.buffer.active;
+    return this.renderBufferLine(buffer.baseY + row, forceDim);
+  }
+
   dispose(): void {
     this.terminal.dispose();
   }
@@ -283,8 +406,13 @@ export class VirtualTerminal {
 export class TerminalManager {
   private terminals: Map<string, VirtualTerminal> = new Map();
 
-  create(id: string, cols: number, rows: number): VirtualTerminal {
-    const term = new VirtualTerminal(id, cols, rows);
+  create(
+    id: string,
+    cols: number,
+    rows: number,
+    scrollback?: number,
+  ): VirtualTerminal {
+    const term = new VirtualTerminal(id, cols, rows, scrollback);
     this.terminals.set(id, term);
     return term;
   }

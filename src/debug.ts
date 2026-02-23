@@ -4,7 +4,11 @@ import { homedir } from "node:os";
 
 const LOG_PATH = join(homedir(), ".maxmux", "debug.log");
 
-let enabled = true;
+let enabled = false;
+
+export function setDebugEnabled(value: boolean): void {
+  enabled = value;
+}
 
 export function debugLog(tag: string, msg: string): void {
   if (!enabled) return;

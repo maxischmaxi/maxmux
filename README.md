@@ -23,54 +23,69 @@ A modern terminal session manager — like tmux, but built with TypeScript.
 - **Auto-save** — sessions persist and restore automatically
 - **Persistent windows** — switch between windows without losing terminal content
 - **Flexible keybindings** — prefix-based, global, or both — bind any key to any command
+- **Copy mode** — vi-style text selection and clipboard copy
 - **Modern stack** — built on Bun, node-pty, and xterm-headless
 
 ---
 
 ## Installation
 
-### Standalone Binary (recommended)
+### One-liner (recommended)
 
-Download the prebuilt binary for your platform from [GitHub Releases](https://github.com/maxmux-terminal/maxmux/releases/latest):
+```bash
+curl -fsSL https://raw.githubusercontent.com/maxischmaxi/maxmux/main/install.sh | sh
+```
+
+This detects your OS and architecture automatically, downloads the right binary, and installs it to `/usr/local/bin`.
+
+To install to a custom directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maxischmaxi/maxmux/main/install.sh | MAXMUX_INSTALL_DIR=~/.local/bin sh
+```
+
+### Standalone Binary
+
+Download the prebuilt binary for your platform from [GitHub Releases](https://github.com/maxischmaxi/maxmux/releases/latest):
 
 ```bash
 # Linux (x64)
-curl -fsSL https://github.com/maxmux-terminal/maxmux/releases/latest/download/maxmux-linux-x64 -o maxmux
+curl -fsSL https://github.com/maxischmaxi/maxmux/releases/latest/download/maxmux-linux-x64 -o maxmux
 chmod +x maxmux
 sudo mv maxmux /usr/local/bin/
 
 # Linux (ARM64)
-curl -fsSL https://github.com/maxmux-terminal/maxmux/releases/latest/download/maxmux-linux-arm64 -o maxmux
+curl -fsSL https://github.com/maxischmaxi/maxmux/releases/latest/download/maxmux-linux-arm64 -o maxmux
 chmod +x maxmux
 sudo mv maxmux /usr/local/bin/
 
 # macOS (Apple Silicon)
-curl -fsSL https://github.com/maxmux-terminal/maxmux/releases/latest/download/maxmux-darwin-arm64 -o maxmux
+curl -fsSL https://github.com/maxischmaxi/maxmux/releases/latest/download/maxmux-darwin-arm64 -o maxmux
 chmod +x maxmux
 sudo mv maxmux /usr/local/bin/
 
 # macOS (Intel)
-curl -fsSL https://github.com/maxmux-terminal/maxmux/releases/latest/download/maxmux-darwin-x64 -o maxmux
+curl -fsSL https://github.com/maxischmaxi/maxmux/releases/latest/download/maxmux-darwin-x64 -o maxmux
 chmod +x maxmux
 sudo mv maxmux /usr/local/bin/
 ```
 
-### Via npm
+### Via npm (requires Bun runtime)
 
 ```bash
-npm install -g maxmux
+npm install -g @maxischmaxi/maxmux
 ```
 
 ### Via Bun
 
 ```bash
-bun add -g maxmux
+bun add -g @maxischmaxi/maxmux
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/maxmux-terminal/maxmux.git
+git clone https://github.com/maxischmaxi/maxmux.git
 cd maxmux
 bun install
 
@@ -141,15 +156,52 @@ Windows preserve their terminal content — programs like vim keep running in th
 | `prefix` + `d` | Detach from session  |
 | `prefix` + `s` | Session list         |
 | `prefix` + `f` | Fuzzy session finder |
+| `prefix` + `N` | Create new session   |
 | `prefix` + `$` | Rename session       |
 
-### Other
+### Copy Mode & Other
 
 | Keys           | Action               |
 | -------------- | -------------------- |
+| `prefix` + `[` | Enter copy mode      |
 | `prefix` + `Q` | Kill server          |
 | `prefix` + `:` | Command palette      |
 | `prefix` + `?` | Show all keybindings |
+
+---
+
+## Copy Mode
+
+Press `prefix` + `[` to enter copy mode. This freezes the pane content and lets you scroll through the scrollback buffer and copy text.
+
+**Navigation:**
+
+| Key          | Action              |
+| ------------ | ------------------- |
+| `k` / `Up`   | Move cursor up      |
+| `j` / `Down` | Move cursor down    |
+| `h` / `Left` | Move cursor left    |
+| `l` / `Right`| Move cursor right   |
+| `Ctrl+u`     | Half page up        |
+| `Ctrl+d`     | Half page down      |
+| `g`          | Go to top           |
+| `G`          | Go to bottom        |
+| `0`          | Start of line       |
+| `$`          | End of line         |
+| `w`          | Next word           |
+| `b`          | Previous word       |
+
+**Selection & Copy:**
+
+| Key          | Action                              |
+| ------------ | ----------------------------------- |
+| `v`          | Start selection                     |
+| `V`          | Start line selection                |
+| `y`          | Yank (copy) selection to clipboard  |
+| `Escape`     | Cancel selection / exit copy mode   |
+| `q`          | Exit copy mode                      |
+
+You can also select text by dragging with the mouse — the selection is automatically copied to the clipboard on release.
 
 ---
 
@@ -157,14 +209,45 @@ Windows preserve their terminal content — programs like vim keep running in th
 
 ```bash
 maxmux                          # Start server + attach to default session
-maxmux new-session [-s name]    # Create a new named session
-maxmux attach [-t name]         # Attach to an existing session
-maxmux ls                       # List all sessions
-maxmux kill-session -t name     # Kill a session
+maxmux new-session [-s name]    # Create a new named session (alias: new)
+maxmux attach [-t session]      # Attach to an existing session (alias: a)
+maxmux ls                       # List all sessions (alias: list-sessions)
+maxmux kill-session -t <name>   # Kill a session
 maxmux kill-server              # Stop the MaxMux server
 maxmux --help                   # Show help
 maxmux --version                # Show version
 ```
+
+### Remote Control
+
+These commands communicate with a running server via Unix socket, useful for scripting and editor integrations (e.g. Neovim):
+
+```bash
+maxmux select-pane -L|-R|-U|-D [-t session]       # Focus pane in direction
+maxmux select-window -n|-p [-t session]            # Switch to next/previous window
+maxmux split-window -h|-v [-t session]             # Split pane horizontally/vertically
+maxmux new-window [-t session]                     # Create a new window
+maxmux send-command <command-id> [-t session]       # Execute any command by ID
+maxmux display-message -p '<format>' [-t session]  # Query session info
+```
+
+### Format Variables
+
+`display-message` supports these format variables:
+
+| Variable              | Description                            |
+| --------------------- | -------------------------------------- |
+| `#{session_name}`     | Name of the current session            |
+| `#{session_id}`       | ID of the current session              |
+| `#{window_name}`      | Name of the active window              |
+| `#{window_id}`        | ID of the active window                |
+| `#{window_index}`     | Index of the active window             |
+| `#{pane_id}`          | ID of the active pane                  |
+| `#{pane_index}`       | Index of the active pane               |
+| `#{pane_at_left}`     | `1` if no pane to the left, else `0`   |
+| `#{pane_at_right}`    | `1` if no pane to the right, else `0`  |
+| `#{pane_at_top}`      | `1` if no pane above, else `0`         |
+| `#{pane_at_bottom}`   | `1` if no pane below, else `0`         |
 
 ---
 
@@ -185,7 +268,22 @@ export default defineConfig({
   // Default shell
   shell: "/bin/zsh",
 
-  // Theme (Catppuccin Mocha defaults)
+  // Scrollback buffer lines per pane (default: 10000, max: 100000)
+  historyLimit: 10_000,
+
+  // Automatically switch to newly created windows (default: true)
+  switchToNewWindow: true,
+
+  // Rename windows to the running process name (default: true)
+  automaticRename: true,
+
+  // Mouse support — click to focus panes, drag to select text (default: true)
+  mouse: true,
+
+  // Show keybinding help popup after pressing prefix (default: true)
+  showPrefixHelp: true,
+
+  // Theme
   theme: {
     statusBar: {
       bg: "#1e1e2e",
@@ -193,32 +291,47 @@ export default defineConfig({
       active: "#89b4fa",
     },
     border: {
-      style: "rounded", // 'rounded' | 'sharp' | 'double' | 'none'
+      style: "rounded", // "rounded" | "sharp" | "double" | "none"
       fg: "#585b70",
       activeFg: "#89b4fa",
     },
   },
 
-  // Prefix keybindings (prefix + key → command)
-  keybindings: {
-    c: "window:create",
-    n: "window:next",
-    p: "window:previous",
-    "%": "pane:split-horizontal",
-    '"': "pane:split-vertical",
-    // ... see examples/maxmux.config.ts for full list
+  // Status bar
+  statusBar: {
+    enabled: true,
+    position: "bottom",    // "top" | "bottom"
+    theme: "catppuccin-mocha", // "catppuccin-mocha" | "dracula" | "nord" |
+                               // "tokyo-night" | "gruvbox" | "one-dark" |
+                               // "solarized" | "custom"
+    separator: {
+      style: "powerline",  // "powerline" | "rounded" | "flat" | "arrow" | "slant"
+    },
+    icons: true,            // Nerd Font icons (requires Nerd Font)
+    left: ["session", "windows"],
+    right: ["git", "cwd", "datetime"],
+    modules: {},            // Per-module overrides (fg, bg, enabled)
+    refreshInterval: 1000,
+    metricsInterval: 5000,
   },
 
-  // Global keybindings (fire immediately, no prefix needed)
-  globalKeybindings: {
-    // Empty by default — see "Custom Keybindings" below
+  // Session list / picker
+  sessionList: {
+    mode: "sidebar",           // "sidebar" | "overlay"
+    sidebarPosition: "left",   // "left" | "right"
+    sidebarWidth: 30,          // 20–80 columns
   },
+
+  // Keybindings & global keybindings
+  keybindings: { /* ... */ },
+  globalKeybindings: { /* ... */ },
 
   // Session persistence
   sessions: {
     autoSave: true,
     autoSaveInterval: 30_000,
     autoRestore: true,
+    savePath: "~/.maxmux/sessions/",
   },
 
   // Plugins
@@ -227,6 +340,26 @@ export default defineConfig({
 ```
 
 The config is fully type-safe — your editor provides autocomplete for every option.
+
+### Status Bar Modules
+
+These modules can be placed in `statusBar.left` or `statusBar.right`:
+
+| Module       | Description                       |
+| ------------ | --------------------------------- |
+| `session`    | Current session name              |
+| `windows`    | Window tabs                       |
+| `datetime`   | Date and time                     |
+| `hostname`   | Machine hostname                  |
+| `user`       | Current user                      |
+| `cwd`        | Working directory of active pane  |
+| `git`        | Git branch                        |
+| `cpu`        | CPU usage                         |
+| `ram`        | Memory usage                      |
+| `battery`    | Battery level                     |
+| `network`    | Network status                    |
+| `prefix`     | Prefix key indicator              |
+| `pane-info`  | Active pane info                  |
 
 ---
 
@@ -291,6 +424,7 @@ globalKeybindings: {
 | `pane:focus-down`       | Focus pane below          |
 | `pane:focus-left`       | Focus pane to the left    |
 | `pane:focus-right`      | Focus pane to the right   |
+| `session:create`        | Create a new session      |
 | `session:list`          | Show session list         |
 | `session:find`          | Fuzzy session finder      |
 | `session:rename`        | Rename current session    |
@@ -298,6 +432,7 @@ globalKeybindings: {
 | `server:kill`           | Kill the MaxMux server    |
 | `command-palette`       | Open command palette      |
 | `keybindings:show`      | Show all keybindings      |
+| `copy-mode:enter`       | Enter copy mode           |
 
 ### Priority
 
@@ -359,7 +494,7 @@ Server (~/.maxmux/server.sock)          Clients
 │  Session Manager       │◄────────── maxmux (attach)
 │  PTY Manager           │◄────────── maxmux (attach)
 │  Terminal Buffers      │◄────────── maxmux ls (CLI)
-│  Plugin System         │
+│  Plugin System         │◄────────── maxmux select-pane (remote)
 │  Auto-Save             │
 └────────────────────────┘
 ```
@@ -367,6 +502,7 @@ Server (~/.maxmux/server.sock)          Clients
 - The **server** runs as a background daemon, managing PTY processes, sessions, and state
 - Each pane has a **virtual terminal buffer** on both server and client for accurate rendering
 - **Clients** connect to render the UI, forward input, and display output
+- **Remote commands** (`select-pane`, `send-command`, etc.) communicate via the same socket for scripting and editor integrations
 - Sessions and their programs (vim, htop, etc.) survive when clients disconnect — just `maxmux attach` to reattach
 - Switching windows replays the terminal buffer, so you see exactly what was on screen
 
@@ -375,7 +511,7 @@ Server (~/.maxmux/server.sock)          Clients
 ## Requirements
 
 - **Linux** or **macOS** (Windows not yet supported)
-- When installing from npm/source: **Bun** >= 1.0
+- When installing from npm/source: **Bun** >= 1.3.5
 
 The standalone binary has no external dependencies.
 

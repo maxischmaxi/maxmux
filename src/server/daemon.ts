@@ -8,9 +8,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { ServerHandler, type ClientMessage } from "./handler.ts";
-import { debugLog, debugClear } from "../debug.ts";
+import type { ClientMessage } from "./handler.ts";
+import { debugLog, setDebugEnabled } from "../debug.ts";
 import type { MaxMuxConfig } from "../config/schema.ts";
+import { findConfigFile } from "../config/loader.ts";
 
 export function getSocketPath(): string {
   const dir = join(homedir(), ".maxmux");
@@ -28,6 +29,33 @@ export function isServerRunning(): Promise<boolean> {
   return new Promise((resolve) => {
     const { connect } = require("node:net") as typeof import("node:net");
     const socketPath = getSocketPath();
+    const pidPath = getPidPath();
+
+    // Check PID file first — if the process is dead, clean up stale files
+    if (existsSync(pidPath)) {
+      try {
+        const pid = parseInt(readFileSync(pidPath, "utf-8").trim(), 10);
+        if (!isNaN(pid)) {
+          try {
+            process.kill(pid, 0); // Check if process exists (signal 0 = no-op)
+          } catch {
+            // Process is dead — clean up stale files
+            debugLog(
+              "server",
+              `stale server detected (pid=${pid} is dead), cleaning up`,
+            );
+            try {
+              unlinkSync(socketPath);
+            } catch {}
+            try {
+              unlinkSync(pidPath);
+            } catch {}
+            resolve(false);
+            return;
+          }
+        }
+      } catch {}
+    }
 
     if (!existsSync(socketPath)) {
       resolve(false);
@@ -36,29 +64,38 @@ export function isServerRunning(): Promise<boolean> {
 
     const client = connect(socketPath);
     client.on("connect", () => {
+      clearTimeout(timeout);
       client.destroy();
       resolve(true);
     });
+    const timeout = setTimeout(() => {
+      client.destroy();
+      resolve(false);
+    }, 1000);
+
     client.on("error", () => {
-      // Stale socket file
-      try {
-        unlinkSync(socketPath);
-      } catch {}
+      clearTimeout(timeout);
+      // Do NOT delete socket file here — transient errors must not kill the server
       resolve(false);
     });
   });
 }
 
 export async function startServer(config: MaxMuxConfig): Promise<void> {
+  setDebugEnabled(config.debug);
+  const { ServerHandler } = await import("./handler.ts");
   const socketPath = getSocketPath();
   const pidPath = getPidPath();
-  const handler = new ServerHandler(config);
+  const configPath = findConfigFile();
+  const handler = new ServerHandler(config, configPath);
 
-  debugClear();
   debugLog(
     "server",
-    `starting server, pid=${process.pid} socket=${socketPath}`,
+    `=== server starting, pid=${process.pid} socket=${socketPath} ===`,
   );
+
+  // Set MAXMUX env so PTY children (e.g. neovim) know they're inside MaxMux
+  process.env.MAXMUX = socketPath;
 
   await handler.init();
 
@@ -82,7 +119,7 @@ export async function startServer(config: MaxMuxConfig): Promise<void> {
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
-    debugLog("server", "cleanup: shutting down");
+    debugLog("server", "=== cleanup: shutting down ===");
     handler.shutdown();
     server.close();
     try {
@@ -133,13 +170,36 @@ export async function startServer(config: MaxMuxConfig): Promise<void> {
     });
   });
 
+  server.on("error", (err) => {
+    debugLog("server", `server socket error: ${(err as Error).message}`);
+  });
+
   server.listen(socketPath, () => {
     // Server ready
   });
 
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-  process.on("SIGHUP", cleanup);
+  // Periodically check if socket file still exists — recreate if deleted externally
+  const socketWatcher = setInterval(() => {
+    if (!existsSync(socketPath)) {
+      debugLog("server", "socket file missing — recreating");
+      server.close(() => {
+        server.listen(socketPath);
+      });
+    }
+  }, 5000);
+  socketWatcher.unref();
+
+  process.on("SIGINT", () => {
+    debugLog("server", "received SIGINT — shutting down");
+    cleanup();
+  });
+  process.on("SIGTERM", () => {
+    debugLog("server", "received SIGTERM — shutting down");
+    cleanup();
+  });
+  process.on("SIGHUP", () => {
+    debugLog("server", "received SIGHUP — ignoring (daemon)");
+  });
 }
 
 export async function startServerDaemon(config: MaxMuxConfig): Promise<void> {

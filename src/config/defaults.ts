@@ -1,6 +1,6 @@
-import type { MaxMuxConfig } from "./schema.ts";
+import type { KeybindingValue, MaxMuxConfig } from "./schema.ts";
 
-export const DEFAULT_KEYBINDINGS: Record<string, string> = {
+export const DEFAULT_KEYBINDINGS: Record<string, KeybindingValue> = {
   c: "window:create",
   n: "window:next",
   p: "window:previous",
@@ -23,17 +23,21 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   Q: "server:kill",
   ":": "command-palette",
   "?": "keybindings:show",
+  "[": "copy-mode:enter",
 };
 
-export const DEFAULT_GLOBAL_KEYBINDINGS: Record<string, string> = {};
+export const DEFAULT_GLOBAL_KEYBINDINGS: Record<string, KeybindingValue> = {};
 
 export const DEFAULT_CONFIG: MaxMuxConfig = {
   prefixKey: "C-a",
   prefixTimeout: 0,
+  historyLimit: 10_000,
   shell: process.env.SHELL || "/bin/bash",
   switchToNewWindow: true,
   automaticRename: true,
-  automaticRenameInterval: 500,
+  automaticRenameInterval: 2000,
+  mouse: true,
+  showPrefixHelp: true,
   theme: {
     statusBar: {
       bg: "#1e1e2e",
@@ -72,4 +76,5 @@ export const DEFAULT_CONFIG: MaxMuxConfig = {
     sidebarWidth: 30,
   },
   plugins: [],
+  debug: false,
 };

@@ -26,9 +26,43 @@ import {
   createSessionSidebarState,
   updateSidebarSessions,
   renderSessionSidebar,
+  renderPreviewBar,
 } from "../ui/SessionSidebar.ts";
 import type { SessionSidebarState } from "../ui/SessionSidebar.ts";
-import { debugLog } from "../debug.ts";
+import {
+  parseSgrMouse,
+  encodeSgrMouse,
+  getBaseButton,
+  isScrollEvent,
+  isMotionEvent,
+  MOUSE_LEFT,
+  MOUSE_SCROLL_UP,
+  MOUSE_SCROLL_DOWN,
+} from "../input/mouse.ts";
+import {
+  createSelectionState,
+  resetSelection,
+  renderSelection,
+  extractSelectedText,
+  copyToClipboard,
+} from "./selection.ts";
+import {
+  createCopyModeState,
+  handleCopyModeInput,
+  handleCopyModeScroll,
+  renderCopyModePane,
+  refreshBufferInfo,
+  ensureCursorVisible,
+  type CopyModeState,
+} from "./copy-mode.ts";
+import { renderPrefixHelp } from "../ui/PrefixHelp.ts";
+import {
+  createConfigErrorDialogState,
+  renderConfigErrorDialog,
+} from "../ui/ConfigErrorDialog.ts";
+import { ConfigWatcher } from "../config/watcher.ts";
+import { findConfigFile } from "../config/loader.ts";
+import { debugLog, setDebugEnabled } from "../debug.ts";
 
 interface SessionInfo {
   id: string;
@@ -44,9 +78,11 @@ interface SessionInfo {
 }
 
 export async function attachToSession(
-  config: MaxMuxConfig,
+  initialConfig: MaxMuxConfig,
   sessionId?: string,
 ): Promise<void> {
+  let config = initialConfig;
+  setDebugEnabled(config.debug);
   const keybindings = new KeybindingRegistry();
   keybindings.loadFromConfig(config.keybindings);
   const globalKeybindings = new KeybindingRegistry();
@@ -59,7 +95,11 @@ export async function attachToSession(
   let activeSession = "";
   let activePaneId = "";
   let showingOverlay = false;
+  let showingPrefixHelp = false;
   let prefixActive = false;
+
+  // Process name tracking for conditional keybindings (unless clause)
+  const paneProcesses: Map<string, string> = new Map();
 
   // Client-side virtual terminals for compositor rendering
   const clientTerminals = new TerminalManager();
@@ -67,6 +107,13 @@ export async function attachToSession(
   let currentLayout: LayoutNode | null = null;
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingWrites = 0;
+
+  // Selection state (mouse drag text selection)
+  const selectionState = createSelectionState();
+
+  // Copy-mode state
+  let copyModeActive = false;
+  let copyModeState: CopyModeState | null = null;
 
   // Sidebar state
   let sidebarActive = false;
@@ -104,7 +151,7 @@ export async function attachToSession(
     const output = statusBarRenderer.render(
       { id: session.id, name: session.name },
       windowInfos,
-      prefixActive,
+      prefixActive || copyModeActive,
       cols,
       rows,
     );
@@ -112,23 +159,64 @@ export async function attachToSession(
     if (output) {
       let out = ansi.hideCursor();
       out += output;
-      // Reposition cursor explicitly instead of relying on save/restore
-      // which can propagate stale cursor positions
-      const activeTerm = clientTerminals.get(activePaneId);
-      if (activeTerm) {
-        out += ansi.setCursorStyle(activeTerm.getCursorStyle());
-        const xOffset =
-          sidebarActive && config.sessionList.sidebarPosition === "left"
-            ? sidebarWidth + 1
-            : 0;
-        out += positionCursor(xOffset);
-        // Only show cursor if the application wants it visible (DECTCEM)
-        if (activeTerm.isCursorVisible()) {
-          out += ansi.showCursor();
+      // Don't restore cursor while overlays, sidebar, or copy-mode are open
+      if (!showingOverlay && !sidebarActive && !copyModeActive) {
+        const activeTerm = clientTerminals.get(activePaneId);
+        if (activeTerm) {
+          out += ansi.setCursorStyle(activeTerm.getCursorStyle());
+          out += positionCursor();
+          if (activeTerm.isCursorVisible()) {
+            out += ansi.showCursor();
+          }
         }
       }
       process.stdout.write(out);
     }
+  };
+
+  // --- Copy-mode ---
+
+  const enterCopyMode = (paneId?: string) => {
+    const targetPaneId = paneId || activePaneId;
+    const term = clientTerminals.get(targetPaneId);
+    if (!term) return;
+    if (selectionState.phase !== "idle") resetSelection(selectionState);
+    copyModeState = createCopyModeState(targetPaneId, term);
+    copyModeActive = true;
+    renderCopyMode();
+  };
+
+  const exitCopyMode = () => {
+    copyModeActive = false;
+    copyModeState = null;
+    process.stdout.write(ansi.clearScreen());
+    renderScreen();
+  };
+
+  const renderCopyMode = () => {
+    if (!copyModeState) return;
+    const term = clientTerminals.get(copyModeState.paneId);
+    const paneRect = paneRects.get(copyModeState.paneId);
+    if (!term || !paneRect) return;
+
+    const xOffset =
+      sidebarActive && config.sessionList.sidebarPosition === "left"
+        ? sidebarWidth + 1
+        : 0;
+
+    let out = ansi.hideCursor();
+    out += renderCopyModePane(copyModeState, term, paneRect, xOffset);
+
+    // Render other panes normally
+    for (const [pid] of paneRects) {
+      if (pid !== copyModeState.paneId) {
+        out += renderPaneContent(pid, undefined, undefined, xOffset);
+      }
+    }
+
+    out += renderBorders();
+    process.stdout.write(out);
+    drawStatusBar();
   };
 
   // --- Compositor rendering ---
@@ -214,6 +302,7 @@ export async function attachToSession(
     layout: LayoutNode | null,
     rects: Map<string, Rect>,
     boundsWidth: number,
+    activePaneForBorders: string,
     xOffset = 0,
   ): string => {
     if (rects.size <= 1 || !layout) return "";
@@ -222,6 +311,7 @@ export async function attachToSession(
       config.theme.border.style as BorderStyle,
     );
     const borderFg = config.theme.border.fg;
+    const activeBorderFg = config.theme.border.activeFg;
     const contentHeight = rows - 1;
 
     // Collect all border cells from layout tree
@@ -232,7 +322,26 @@ export async function attachToSession(
       cells,
     );
 
-    let out = ansi.fgHex(borderFg);
+    // Pre-compute border cells adjacent to active pane for O(1) lookup
+    const activeBorderCells = new Set<string>();
+    const activeRect = rects.get(activePaneForBorders);
+    if (activeRect) {
+      for (let y = activeRect.y; y < activeRect.y + activeRect.height; y++) {
+        const rKey = `${activeRect.x + activeRect.width},${y}`;
+        if (cells.has(rKey)) activeBorderCells.add(rKey);
+        const lKey = `${activeRect.x - 1},${y}`;
+        if (cells.has(lKey)) activeBorderCells.add(lKey);
+      }
+      for (let x = activeRect.x; x < activeRect.x + activeRect.width; x++) {
+        const bKey = `${x},${activeRect.y + activeRect.height}`;
+        if (cells.has(bKey)) activeBorderCells.add(bKey);
+        const tKey = `${x},${activeRect.y - 1}`;
+        if (cells.has(tKey)) activeBorderCells.add(tKey);
+      }
+    }
+
+    let out = "";
+    let currentColor = "";
 
     for (const key of cells) {
       const sep = key.indexOf(",");
@@ -274,7 +383,11 @@ export async function attachToSession(
         ch = borderChars.horizontal;
       }
 
-      out += ansi.moveTo(x + xOffset, y) + ch;
+      const color = activeBorderCells.has(key) ? activeBorderFg : borderFg;
+      const colorSwitch = color !== currentColor ? ansi.fgHex(color) : "";
+      currentColor = color;
+
+      out += ansi.moveTo(x + xOffset, y) + colorSwitch + ch;
     }
 
     out += ansi.resetStyle();
@@ -282,7 +395,7 @@ export async function attachToSession(
   };
 
   const renderBorders = (): string => {
-    return renderBordersFor(currentLayout, paneRects, cols);
+    return renderBordersFor(currentLayout, paneRects, cols, activePaneId);
   };
 
   const positionCursor = (xOffset = 0): string => {
@@ -299,7 +412,7 @@ export async function attachToSession(
   };
 
   const renderScreen = () => {
-    if (showingOverlay) return;
+    if (showingOverlay || showingPrefixHelp) return;
 
     let out = ansi.hideCursor();
 
@@ -335,7 +448,48 @@ export async function attachToSession(
       }
 
       // Render main area borders
-      out += renderBordersFor(useLayout, useRects, mainWidth, mainXOffset);
+      const sidebarActivePane = isPreviewActive ? "" : activePaneId;
+      out += renderBordersFor(
+        useLayout,
+        useRects,
+        mainWidth,
+        sidebarActivePane,
+        mainXOffset,
+      );
+
+      // Render selection highlight in main area if active (non-preview only)
+      if (!isPreviewActive && selectionState.phase !== "idle") {
+        const selTerm = clientTerminals.get(selectionState.paneId);
+        const selRect = paneRects.get(selectionState.paneId);
+        if (selTerm && selRect) {
+          out += renderSelection(selectionState, selTerm, selRect, mainXOffset);
+        }
+      }
+
+      // Render preview bar if previewing a non-active session
+      if (isPreviewActive) {
+        const previewSession = sessions.find((s) => s.id === previewSessionId);
+        if (previewSession) {
+          const previewWindows = previewSession.windows.map((w, i) => ({
+            name: w.name,
+            index: i,
+            isActive: w.id === previewSession.activeWindow,
+          }));
+          out += renderPreviewBar(
+            previewSession.name,
+            previewWindows,
+            mainXOffset,
+            mainWidth,
+            rows - 2, // row above status bar
+            {
+              fg: config.theme.statusBar.fg,
+              bg: config.theme.statusBar.bg,
+              activeFg: config.theme.statusBar.active,
+              borderFg: config.theme.border.fg,
+            },
+          );
+        }
+      }
 
       // Render sidebar
       const sidebarScreenX = sidebarPos === "left" ? 0 : cols - sidebarWidth;
@@ -354,21 +508,8 @@ export async function attachToSession(
         },
       );
 
-      // Position cursor: hide when showing preview (user can't interact),
-      // show normally when viewing active session
-      if (isPreviewActive) {
-        // Keep cursor hidden — preview is read-only
-      } else {
-        const activeTerm = clientTerminals.get(activePaneId);
-        if (activeTerm) {
-          out += ansi.setCursorStyle(activeTerm.getCursorStyle());
-        }
-        out += positionCursor(mainXOffset);
-        // Only show cursor if the application wants it visible (DECTCEM)
-        if (!activeTerm || activeTerm.isCursorVisible()) {
-          out += ansi.showCursor();
-        }
-      }
+      // Keep cursor hidden while sidebar is open — focus is on sidebar navigation
+      // (both preview and non-preview modes)
     } else {
       if (paneRects.size === 0) {
         out += ansi.showCursor();
@@ -381,6 +522,16 @@ export async function attachToSession(
       }
 
       out += renderBorders();
+
+      // Render selection highlight if active
+      if (selectionState.phase !== "idle") {
+        const selTerm = clientTerminals.get(selectionState.paneId);
+        const selRect = paneRects.get(selectionState.paneId);
+        if (selTerm && selRect) {
+          out += renderSelection(selectionState, selTerm, selRect, 0);
+        }
+      }
+
       const activeTerm = clientTerminals.get(activePaneId);
       if (activeTerm) {
         out += ansi.setCursorStyle(activeTerm.getCursorStyle());
@@ -397,7 +548,7 @@ export async function attachToSession(
   };
 
   const scheduleRender = () => {
-    if (renderTimer || showingOverlay) return;
+    if (renderTimer || showingOverlay || showingPrefixHelp) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
       if (pendingWrites > 0 || previewPendingWrites > 0) {
@@ -405,7 +556,11 @@ export async function attachToSession(
         scheduleRender();
         return;
       }
-      renderScreen();
+      if (copyModeActive) {
+        renderCopyMode();
+      } else {
+        renderScreen();
+      }
     }, 0);
   };
 
@@ -430,7 +585,7 @@ export async function attachToSession(
           existing.resize(w, h);
         }
       } else {
-        clientTerminals.create(paneId, w, h);
+        clientTerminals.create(paneId, w, h, config.historyLimit);
       }
     }
 
@@ -478,6 +633,13 @@ export async function attachToSession(
             pendingWrites++;
             term.write(msg.data, () => {
               pendingWrites--;
+              if (
+                copyModeActive &&
+                copyModeState &&
+                copyModeState.paneId === msg.paneId
+              ) {
+                refreshBufferInfo(copyModeState, term);
+              }
               scheduleRender();
             });
           }
@@ -502,17 +664,32 @@ export async function attachToSession(
             activePaneId = activeWindow?.activePane || "";
             debugLog("client", `activePane=${activePaneId}`);
 
-            // Session has no windows left (all panes exited) → detach
+            // Session has no windows left — server should have migrated us.
+            // If we still see an empty session, try to attach to another one.
+            // Only exit if there are truly no sessions left.
             if (session.windows.length === 0) {
+              const fallback = sessions.find(
+                (s) => s.id !== activeSession && s.windows.length > 0,
+              );
+              if (fallback) {
+                connection.send({ type: "attach", sessionId: fallback.id });
+              } else {
+                cleanup();
+                process.stdout.write("\r\n[exited]\r\n");
+                process.exit(0);
+              }
+            }
+          } else {
+            // Our session was deleted — server should have migrated us.
+            // Try to attach to any available session as fallback.
+            const fallback = sessions.find((s) => s.windows.length > 0);
+            if (fallback) {
+              connection.send({ type: "attach", sessionId: fallback.id });
+            } else {
               cleanup();
               process.stdout.write("\r\n[exited]\r\n");
               process.exit(0);
             }
-          } else {
-            // Our session was deleted entirely → detach
-            cleanup();
-            process.stdout.write("\r\n[exited]\r\n");
-            process.exit(0);
           }
 
           // Update sidebar sessions if sidebar is open
@@ -521,6 +698,11 @@ export async function attachToSession(
               id: s.id,
               name: s.name,
               windowCount: s.windows.length,
+              windows: s.windows.map((w, i) => ({
+                name: w.name,
+                index: i,
+                isActive: w.id === s.activeWindow,
+              })),
               attached: s.attached,
               isActive: s.id === msg.activeSession,
             }));
@@ -561,11 +743,28 @@ export async function attachToSession(
           scheduleRender();
           break;
 
+        case "cursor-state": {
+          const panes = msg.panes as Record<
+            string,
+            { cursorVisible: boolean; cursorStyle: number }
+          >;
+          for (const [paneId, state] of Object.entries(panes)) {
+            const term = clientTerminals.get(paneId);
+            if (term) {
+              term.setCursorVisible(state.cursorVisible);
+              term.setCursorStyle(state.cursorStyle);
+            }
+          }
+          scheduleRender();
+          break;
+        }
+
         case "pane:exited":
           paneRects.delete(msg.paneId);
           clientTerminals.remove(msg.paneId);
           knownPaneIds.delete(msg.paneId);
           debugLog("client", `pane exited: ${msg.paneId}`);
+          scheduleRender();
           break;
 
         case "preview-output": {
@@ -590,6 +789,14 @@ export async function attachToSession(
           syncPreviewTerminals();
           scheduleRender();
           break;
+
+        case "process-info": {
+          const panes = msg.panes as Record<string, string>;
+          for (const [paneId, name] of Object.entries(panes)) {
+            paneProcesses.set(paneId, name);
+          }
+          break;
+        }
 
         case "metrics":
           statusBarRenderer.updateMetrics(msg.data as SystemMetrics);
@@ -635,25 +842,88 @@ export async function attachToSession(
           break;
 
         case "command":
+          if (showingPrefixHelp) {
+            showingPrefixHelp = false;
+            process.stdout.write(ansi.clearScreen());
+            renderScreen();
+          }
           handleCommand(action.commandId);
           break;
 
         case "prefix-activated":
           prefixActive = true;
+          if (
+            config.showPrefixHelp &&
+            !showingOverlay &&
+            !showingPrefixHelp &&
+            !copyModeActive &&
+            !sidebarActive
+          ) {
+            showingPrefixHelp = true;
+            const bindings = keybindings.list();
+            process.stdout.write(
+              ansi.hideCursor() + renderPrefixHelp(bindings, cols, rows),
+            );
+          }
           drawStatusBar();
           break;
 
         case "prefix-timeout":
+          if (showingPrefixHelp) {
+            showingPrefixHelp = false;
+            process.stdout.write(ansi.clearScreen());
+            renderScreen();
+          }
           prefixActive = false;
           drawStatusBar();
           break;
       }
     },
+    () => paneProcesses.get(activePaneId),
   );
+
+  // --- Live Config Reload ---
+
+  const configWatcher = new ConfigWatcher(
+    findConfigFile(),
+    (newConfig) => {
+      config = newConfig;
+      setDebugEnabled(config.debug);
+      // Reload keybindings
+      keybindings.clear();
+      keybindings.loadFromConfig(config.keybindings);
+      globalKeybindings.clear();
+      globalKeybindings.loadFromConfig(config.globalKeybindings);
+      // Update InputRouter prefix settings
+      inputRouter.updateConfig(config.prefixKey, config.prefixTimeout);
+      // Update StatusBar
+      statusBarRenderer.updateConfig(config.statusBar);
+      // Full re-render
+      process.stdout.write(ansi.clearScreen());
+      renderScreen();
+    },
+    (errorMessage) => {
+      // Show error dialog overlay
+      showingOverlay = true;
+      const errorState = createConfigErrorDialogState(errorMessage);
+      process.stdout.write(
+        ansi.hideCursor() + renderConfigErrorDialog(errorState, cols, rows),
+      );
+      const onDismiss = () => {
+        process.stdin.removeListener("data", onDismiss);
+        showingOverlay = false;
+        process.stdout.write(ansi.clearScreen());
+        renderScreen();
+      };
+      process.stdin.on("data", onDismiss);
+    },
+  );
+  configWatcher.start();
 
   const handleCommand = (commandId: string) => {
     // Reset prefix state after command execution
     prefixActive = false;
+    drawStatusBar();
 
     switch (commandId) {
       case "session:detach":
@@ -713,6 +983,10 @@ export async function attachToSession(
       case "session:create":
         showNewSessionDialog();
         return;
+
+      case "copy-mode:enter":
+        enterCopyMode();
+        return;
     }
 
     // Forward to server
@@ -722,7 +996,9 @@ export async function attachToSession(
 
   const showKeybindingsOverlay = () => {
     showingOverlay = true;
-    process.stdout.write(ansi.clearScreen() + ansi.moveToOrigin());
+    process.stdout.write(
+      ansi.hideCursor() + ansi.clearScreen() + ansi.moveToOrigin(),
+    );
     process.stdout.write("MaxMux Keybindings (press any key to close)\r\n");
     process.stdout.write("\u2500".repeat(50) + "\r\n\n");
 
@@ -754,7 +1030,9 @@ export async function attachToSession(
 
   const showSessionListOverlay = () => {
     showingOverlay = true;
-    process.stdout.write(ansi.clearScreen() + ansi.moveToOrigin());
+    process.stdout.write(
+      ansi.hideCursor() + ansi.clearScreen() + ansi.moveToOrigin(),
+    );
     process.stdout.write("Sessions (press any key to close)\r\n");
     process.stdout.write("\u2500".repeat(50) + "\r\n\n");
 
@@ -776,6 +1054,10 @@ export async function attachToSession(
   };
 
   const showSessionSidebar = () => {
+    // Clear any active selection when opening sidebar
+    if (selectionState.phase !== "idle") {
+      resetSelection(selectionState);
+    }
     sidebarActive = true;
     sidebarWidth = Math.min(
       config.sessionList.sidebarWidth,
@@ -786,6 +1068,11 @@ export async function attachToSession(
       id: s.id,
       name: s.name,
       windowCount: s.windows.length,
+      windows: s.windows.map((w, i) => ({
+        name: w.name,
+        index: i,
+        isActive: w.id === s.activeWindow,
+      })),
       attached: s.attached,
       isActive: s.id === activeSession,
     }));
@@ -861,14 +1148,14 @@ export async function attachToSession(
     // Switching preview session — need to clear main area
     sidebarNeedsClear = true;
 
-    // Start new preview
+    // Start new preview (rows - 1 to leave space for preview bar)
     previewSessionId = selected.id;
     const mainWidth = cols - sidebarWidth - 1;
     connection.send({
       type: "preview",
       sessionId: selected.id,
       cols: mainWidth,
-      rows,
+      rows: rows - 1,
     });
   };
 
@@ -965,8 +1252,39 @@ export async function attachToSession(
       })),
     );
 
+    let prevFinderHeight = 0;
+
     const redrawFinder = () => {
-      process.stdout.write(renderSessionFinder(finderState, cols, rows));
+      const maxItems = Math.min(finderState.filtered.length, rows - 8);
+      const width = Math.min(50, cols - 4);
+      const height = Math.max(6, maxItems + 5);
+
+      // Clear leftover rows from the previous (taller) render
+      if (prevFinderHeight > height) {
+        const x = Math.floor((cols - width) / 2);
+        const y = Math.floor((rows - height) / 2);
+        const prevY = Math.floor((rows - prevFinderHeight) / 2);
+        const blank = " ".repeat(width);
+        let clear = "";
+        // Clear rows above the new box (old box started higher)
+        for (let row = prevY; row < y; row++) {
+          clear += ansi.moveTo(x, row) + blank;
+        }
+        // Clear rows below the new box (old box extended lower)
+        const newBottom = y + height;
+        const prevBottom = prevY + prevFinderHeight;
+        for (let row = newBottom; row < prevBottom; row++) {
+          clear += ansi.moveTo(x, row) + blank;
+        }
+        if (clear) {
+          process.stdout.write(clear + ansi.resetStyle());
+        }
+      }
+
+      prevFinderHeight = height;
+      process.stdout.write(
+        ansi.hideCursor() + renderSessionFinder(finderState, cols, rows),
+      );
     };
 
     const closeFinder = () => {
@@ -1063,7 +1381,9 @@ export async function attachToSession(
     );
 
     const redrawDialog = () => {
-      process.stdout.write(renderRenameDialog(renameState, cols, rows));
+      process.stdout.write(
+        ansi.hideCursor() + renderRenameDialog(renameState, cols, rows),
+      );
     };
 
     const closeDialog = () => {
@@ -1138,7 +1458,9 @@ export async function attachToSession(
     );
 
     const redrawDialog = () => {
-      process.stdout.write(renderRenameDialog(dialogState, cols, rows));
+      process.stdout.write(
+        ansi.hideCursor() + renderRenameDialog(dialogState, cols, rows),
+      );
     };
 
     const closeDialog = () => {
@@ -1209,6 +1531,7 @@ export async function attachToSession(
     if (cleaned) return;
     cleaned = true;
     if (renderTimer) clearTimeout(renderTimer);
+    configWatcher.stop();
     inputRouter.destroy();
     clientTerminals.removeAll();
     previewTerminals.removeAll();
@@ -1216,6 +1539,9 @@ export async function attachToSession(
       process.stdin.setRawMode?.(false);
     } catch {}
     process.stdin.pause();
+    if (config.mouse) {
+      process.stdout.write(ansi.disableMouse());
+    }
     process.stdout.write(ansi.exitAltScreen());
     process.stdout.write(ansi.showCursor());
     process.stdout.write(ansi.resetStyle());
@@ -1234,25 +1560,292 @@ export async function attachToSession(
   process.stdin.resume();
   process.stdout.write(ansi.enterAltScreen());
   process.stdout.write(ansi.clearScreen());
+  if (config.mouse) {
+    process.stdout.write(ansi.enableMouse());
+  }
 
   // Send initial resize then attach
   connection.send({ type: "resize", cols, rows });
   connection.send({ type: "attach", sessionId, cwd: process.cwd() });
 
+  // Mouse event handler — routes mouse clicks to the correct pane
+  // Implements drag-to-select text with copy-to-clipboard on release
+  const handleMouseEvent = (event: import("../input/mouse.ts").MouseEvent) => {
+    const baseButton = getBaseButton(event.button);
+    const motion = isMotionEvent(event.button);
+
+    // Calculate sidebar offset
+    const xOffset =
+      sidebarActive && config.sessionList.sidebarPosition === "left"
+        ? sidebarWidth + 1
+        : 0;
+
+    // Adjust screen coordinates for sidebar offset
+    const screenX = event.x - xOffset;
+    const screenY = event.y;
+
+    // Ignore clicks on sidebar area
+    if (sidebarActive && event.x < xOffset) return;
+    // Ignore clicks on status bar row
+    if (screenY >= rows - 1) return;
+
+    // Determine which rects/terminals to use (preview vs main)
+    const isPreviewActive =
+      sidebarActive &&
+      previewSessionId &&
+      previewSessionId !== activeSession &&
+      previewPaneRects.size > 0;
+    const useRects = isPreviewActive ? previewPaneRects : paneRects;
+
+    // --- Handle ongoing selection (phase !== idle) ---
+    if (selectionState.phase !== "idle") {
+      const selRect = paneRects.get(selectionState.paneId);
+      if (!selRect) {
+        resetSelection(selectionState);
+        scheduleRender();
+        return;
+      }
+
+      if (motion && baseButton === MOUSE_LEFT) {
+        // Mouse drag — update selection end, clamp to pane bounds
+        selectionState.phase = "selecting";
+        selectionState.endCol = Math.max(
+          0,
+          Math.min(screenX - selRect.x, selRect.width - 1),
+        );
+        selectionState.endRow = Math.max(
+          0,
+          Math.min(screenY - selRect.y, selRect.height - 1),
+        );
+        scheduleRender();
+        return;
+      }
+
+      if (event.isRelease && baseButton === MOUSE_LEFT) {
+        if (selectionState.phase === "selecting") {
+          // Drag ended — extract text and copy to clipboard
+          const selTerm = clientTerminals.get(selectionState.paneId);
+          if (selTerm) {
+            const text = extractSelectedText(selectionState, selTerm);
+            if (text.length > 0) {
+              copyToClipboard(text);
+            }
+          }
+          resetSelection(selectionState);
+          scheduleRender();
+        } else {
+          // Was "pressed" but no drag occurred — treat as click
+          const clickPaneId = selectionState.paneId;
+          resetSelection(selectionState);
+          if (!isPreviewActive && clickPaneId !== activePaneId) {
+            connection.send({
+              type: "command",
+              id: "pane:focus",
+              args: { paneId: clickPaneId },
+            });
+          }
+        }
+        return;
+      }
+
+      // Non-left events while selecting — ignore
+      return;
+    }
+
+    // --- No active selection ---
+
+    // Hit test: find which pane contains the event
+    let targetPaneId: string | null = null;
+    let targetRect: Rect | null = null;
+    for (const [paneId, rect] of useRects) {
+      if (
+        screenX >= rect.x &&
+        screenX < rect.x + rect.width &&
+        screenY >= rect.y &&
+        screenY < rect.y + rect.height
+      ) {
+        targetPaneId = paneId;
+        targetRect = rect;
+        break;
+      }
+    }
+
+    // Click landed on a border or outside any pane
+    if (!targetPaneId || !targetRect) return;
+
+    // Forward mouse events to PTY if the app has enabled mouse tracking
+    if (!isPreviewActive) {
+      const targetTerm = clientTerminals.get(targetPaneId);
+      if (targetTerm && targetTerm.isMouseTrackingActive()) {
+        const localX = screenX - targetRect.x;
+        const localY = screenY - targetRect.y;
+        const encoded = encodeSgrMouse(
+          event.button,
+          localX,
+          localY,
+          event.isRelease,
+        );
+        connection.send({
+          type: "input",
+          paneId: targetPaneId,
+          data: Buffer.from(encoded).toString("base64"),
+        });
+        return;
+      }
+    }
+
+    // No mouse tracking — handle MaxMux-level mouse behavior
+    if (
+      !event.isRelease &&
+      !motion &&
+      baseButton === MOUSE_LEFT &&
+      !isScrollEvent(event.button)
+    ) {
+      // Left press — start potential selection
+      selectionState.phase = "pressed";
+      selectionState.paneId = targetPaneId;
+      selectionState.startCol = screenX - targetRect.x;
+      selectionState.startRow = screenY - targetRect.y;
+      selectionState.endCol = selectionState.startCol;
+      selectionState.endRow = selectionState.startRow;
+    }
+
+    // Scroll events on non-mouse-tracking panes → enter/control copy-mode
+    if (isScrollEvent(event.button)) {
+      const scrollBtn = getBaseButton(event.button);
+      if (scrollBtn === MOUSE_SCROLL_UP && !copyModeActive) {
+        enterCopyMode(targetPaneId);
+        if (copyModeState) {
+          copyModeState.scrollOffset = Math.min(
+            3,
+            Math.max(
+              0,
+              copyModeState.bufferLength - copyModeState.viewportRows,
+            ),
+          );
+          ensureCursorVisible(copyModeState);
+          renderCopyMode();
+        }
+      }
+    }
+  };
+
   // Handle stdin
   process.stdin.on("data", (data: Buffer) => {
     if (showingOverlay) return;
+
+    // Copy-mode input routing
+    if (copyModeActive && copyModeState) {
+      // Let prefix key through so prefix commands still work
+      if (data.length === 1 && data[0] === parsePrefixKey(config.prefixKey)) {
+        inputRouter.handleInput(data);
+        return;
+      }
+      // Mouse events in copy-mode
+      if (
+        config.mouse &&
+        data.length >= 3 &&
+        data[0] === 0x1b &&
+        data[1] === 0x5b &&
+        data[2] === 0x3c
+      ) {
+        const result = parseSgrMouse(data, 0);
+        if (result) {
+          const baseBtn = getBaseButton(result.event.button);
+          if (isScrollEvent(result.event.button)) {
+            const scrollUp = baseBtn === MOUSE_SCROLL_UP;
+            const action = handleCopyModeScroll(copyModeState, scrollUp);
+            switch (action.type) {
+              case "exit":
+                exitCopyMode();
+                break;
+              case "render":
+                renderCopyMode();
+                break;
+            }
+          }
+        }
+        return;
+      }
+      const term = clientTerminals.get(copyModeState.paneId);
+      if (!term) {
+        exitCopyMode();
+        return;
+      }
+      const action = handleCopyModeInput(copyModeState, data, term);
+      switch (action.type) {
+        case "exit":
+          exitCopyMode();
+          break;
+        case "yank":
+          copyToClipboard(action.text);
+          exitCopyMode();
+          break;
+        case "render":
+          renderCopyMode();
+          break;
+      }
+      return;
+    }
+
     if (sidebarActive) {
+      // In sidebar mode, ignore mouse events (v1)
+      if (
+        config.mouse &&
+        data.length >= 3 &&
+        data[0] === 0x1b &&
+        data[1] === 0x5b &&
+        data[2] === 0x3c
+      ) {
+        return;
+      }
       handleSidebarInput(data);
       return;
     }
+
+    // Check for SGR mouse sequences
+    if (
+      config.mouse &&
+      data.length >= 3 &&
+      data[0] === 0x1b &&
+      data[1] === 0x5b &&
+      data[2] === 0x3c
+    ) {
+      let offset = 0;
+      while (offset < data.length) {
+        // Check if remaining data starts with SGR mouse prefix
+        if (
+          offset + 2 < data.length &&
+          data[offset] === 0x1b &&
+          data[offset + 1] === 0x5b &&
+          data[offset + 2] === 0x3c
+        ) {
+          const result = parseSgrMouse(data, offset);
+          if (result) {
+            handleMouseEvent(result.event);
+            offset += result.consumed;
+            continue;
+          }
+        }
+        // Remaining data is not a mouse sequence — pass to input router
+        inputRouter.handleInput(data.subarray(offset));
+        break;
+      }
+      return;
+    }
+
     inputRouter.handleInput(data);
   });
 
   // Handle terminal resize
-  process.stdout.on("resize", () => {
-    cols = process.stdout.columns || 80;
-    rows = process.stdout.rows || 24;
+  // Bun does not fire process.stdout "resize" events — listen for
+  // SIGWINCH directly and keep stdout.on("resize") as Node.js fallback.
+  const onTerminalResize = () => {
+    const newCols = process.stdout.columns || 80;
+    const newRows = process.stdout.rows || 24;
+    if (newCols === cols && newRows === rows) return; // dedup
+    cols = newCols;
+    rows = newRows;
 
     if (sidebarActive) {
       // Reclamp sidebar width
@@ -1263,20 +1856,22 @@ export async function attachToSession(
       const mainWidth = cols - sidebarWidth - 1;
       connection.send({ type: "resize", cols: mainWidth, rows });
 
-      // Re-request preview if active
+      // Re-request preview if active (rows - 1 for preview bar)
       if (previewSessionId && previewSessionId !== activeSession) {
         connection.send({
           type: "preview",
           sessionId: previewSessionId,
           cols: mainWidth,
-          rows,
+          rows: rows - 1,
         });
       }
     } else {
       connection.send({ type: "resize", cols, rows });
     }
     // Server will send updated layout which triggers syncTerminals + renderScreen
-  });
+  };
+  process.stdout.on("resize", onTerminalResize);
+  process.on("SIGWINCH", onTerminalResize);
 
   // Periodically refresh status bar (configurable interval)
   const refreshInterval = config.statusBar.refreshInterval || 1000;
@@ -1286,7 +1881,12 @@ export async function attachToSession(
 
   // Handle clean exit
   process.on("SIGINT", () => {
-    // Don't exit on Ctrl+C, pass through to PTY
+    // Bun's raw mode may not fully disable ISIG, causing Ctrl+C to
+    // fire SIGINT instead of delivering byte 0x03 to stdin.
+    // Re-emit as stdin data so it flows through the normal input pipeline.
+    if (!cleaned) {
+      process.stdin.emit("data", Buffer.from([0x03]));
+    }
   });
 
   process.on("SIGTERM", () => {
@@ -1302,7 +1902,7 @@ export async function attachToSession(
       try {
         process.stdin.setRawMode?.(false);
       } catch {}
-      process.stdout.write("\x1b[?1049l\x1b[?25h\x1b[0m");
+      process.stdout.write("\x1b[?1002l\x1b[?1006l\x1b[?1049l\x1b[?25h\x1b[0m");
     }
   });
 }

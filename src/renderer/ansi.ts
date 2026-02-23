@@ -39,14 +39,15 @@ export const dim = () => `${CSI}2m`;
 export const italic = () => `${CSI}3m`;
 export const underline = () => `${CSI}4m`;
 export const inverse = () => `${CSI}7m`;
+export const noDim = () => `${CSI}22m`;
 
 // Alternative screen buffer
 export const enterAltScreen = () => `${CSI}?1049h`;
 export const exitAltScreen = () => `${CSI}?1049l`;
 
 // Mouse
-export const enableMouse = () => `${CSI}?1000h${CSI}?1006h`;
-export const disableMouse = () => `${CSI}?1000l${CSI}?1006l`;
+export const enableMouse = () => `${CSI}?1002h${CSI}?1006h`;
+export const disableMouse = () => `${CSI}?1002l${CSI}?1006l`;
 
 /**
  * Parse a hex color string to RGB values.

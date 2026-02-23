@@ -15,6 +15,11 @@ export type ServerMessage =
     }
   | { type: "pane:exited"; paneId: string; exitCode: number }
   | { type: "metrics"; data: SystemMetrics }
+  | {
+      type: "cursor-state";
+      panes: Record<string, { cursorVisible: boolean; cursorStyle: number }>;
+    }
+  | { type: "process-info"; panes: Record<string, string> }
   | { type: "error"; message: string }
   | { type: "result"; success: boolean; data?: string; error?: string }
   | { type: "preview-output"; paneId: string; data: string }
@@ -120,6 +125,14 @@ export class Broadcaster {
   }
 
   broadcast(message: ServerMessage): void {
+    // Only send to clients that have attached to a session (skip CLI connections)
+    for (const clientId of this.clientSessions.keys()) {
+      this.send(clientId, message);
+    }
+  }
+
+  /** Send to ALL connected sockets (including CLI connections). */
+  broadcastAll(message: ServerMessage): void {
     for (const clientId of this.clients.keys()) {
       this.send(clientId, message);
     }
@@ -138,7 +151,7 @@ export class Broadcaster {
   }
 
   notifyShutdown(): void {
-    this.broadcast({ type: "error", message: "server-shutdown" });
+    this.broadcastAll({ type: "error", message: "server-shutdown" });
     for (const socket of this.clients.values()) {
       if (!socket.destroyed) {
         socket.end();

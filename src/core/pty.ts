@@ -58,6 +58,31 @@ export class PtyManager {
     handle.pty.resize(safeCols, safeRows);
   }
 
+  /** Resize bypassing the dedup cache — always sends SIGWINCH. */
+  forceResize(id: string, cols: number, rows: number): void {
+    const handle = this.ptys.get(id);
+    if (!handle) return;
+    const safeCols = Math.max(1, cols);
+    const safeRows = Math.max(1, rows);
+    const current = this.ptySizes.get(id);
+    if (current && current.cols === safeCols && current.rows === safeRows) {
+      // Kernel sends no SIGWINCH when size is unchanged.
+      // Resize to a different size first to force SIGWINCH delivery.
+      // The second resize is delayed so the kernel doesn't coalesce
+      // the two SIGWINCHs into one (same signal pending = dropped).
+      const tempCols = safeCols > 1 ? safeCols - 1 : safeCols + 1;
+      handle.pty.resize(tempCols, safeRows);
+      setTimeout(() => {
+        if (this.ptys.has(id)) {
+          handle.pty.resize(safeCols, safeRows);
+        }
+      }, 16);
+    } else {
+      handle.pty.resize(safeCols, safeRows);
+    }
+    this.ptySizes.set(id, { cols: safeCols, rows: safeRows });
+  }
+
   resizeAll(cols: number, rows: number): void {
     for (const handle of this.ptys.values()) {
       handle.pty.resize(Math.max(1, cols), Math.max(1, rows));
