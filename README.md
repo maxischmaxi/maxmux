@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@maxischmaxi/maxmux"><img src="https://img.shields.io/npm/v/@maxischmaxi/maxmux" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@maxischmaxi/maxmux"><img src="https://img.shields.io/npm/dm/@maxischmaxi/maxmux" alt="npm downloads" /></a>
+  <a href="https://github.com/maxischmaxi/maxmux/releases/latest"><img src="https://img.shields.io/github/v/release/maxischmaxi/maxmux" alt="GitHub release" /></a>
   <a href="https://github.com/maxischmaxi/maxmux/blob/main/LICENSE"><img src="https://img.shields.io/github/license/maxischmaxi/maxmux" alt="license" /></a>
 </p>
 
