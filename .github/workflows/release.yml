@@ -27,7 +27,7 @@ jobs:
             artifact: maxmux-darwin-arm64
 
           - target: bun-darwin-x64
-            os: macos-13
+            os: macos-latest
             artifact: maxmux-darwin-x64
 
     runs-on: ${{ matrix.os }}
