@@ -7,9 +7,18 @@ export interface CellData {
   attrs: number; // bold, italic, etc. as bitmask
 }
 
+// Regex to match DECSCUSR (Set Cursor Style) escape sequences: CSI Ps SP q
+const DECSCUSR_RE = /\x1b\[(\d*) q/g;
+
+// Regex to match DECTCEM (Cursor Visibility) escape sequences: CSI ? 25 h/l
+// Handles both standalone (\x1b[?25l) and multi-param (\x1b[?12;25l) forms
+const DECTCEM_RE = /\x1b\[\?(?:\d+;)*25([hl])/g;
+
 export class VirtualTerminal {
   private terminal: Terminal;
   readonly id: string;
+  private _cursorStyle: number = 0; // 0 = default (block)
+  private _cursorVisible: boolean = true; // DECTCEM: true = visible
 
   constructor(id: string, cols: number, rows: number) {
     this.id = id;
@@ -17,7 +26,28 @@ export class VirtualTerminal {
   }
 
   write(data: string, onProcessed?: () => void): void {
+    // Track DECSCUSR cursor style changes in the data stream
+    DECSCUSR_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = DECSCUSR_RE.exec(data)) !== null) {
+      this._cursorStyle = match[1] ? parseInt(match[1], 10) : 0;
+    }
+
+    // Track DECTCEM cursor visibility changes
+    DECTCEM_RE.lastIndex = 0;
+    while ((match = DECTCEM_RE.exec(data)) !== null) {
+      this._cursorVisible = match[1] === "h"; // 'h' = show, 'l' = hide
+    }
+
     this.terminal.write(data, onProcessed);
+  }
+
+  getCursorStyle(): number {
+    return this._cursorStyle;
+  }
+
+  isCursorVisible(): boolean {
+    return this._cursorVisible;
   }
 
   onWriteParsed(listener: () => void): { dispose: () => void } {

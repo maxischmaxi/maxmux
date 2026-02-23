@@ -86,9 +86,11 @@ export class Compositor {
     // Render status bar
     this.renderStatusBar(statusBarItems, windowList, sessionName, activePaneId);
 
-    // Calculate cursor position in active pane
+    // Calculate cursor position, style, and visibility in active pane
     let cursorX = 0;
     let cursorY = 0;
+    let cursorStyle = 0;
+    let cursorVisible = true;
     const activeTerm = paneTerminals.get(zoomedPaneId || activePaneId);
     const activeRect = zoomedPaneId
       ? { x: 0, y: 0, width: this.screen.width, height: contentHeight }
@@ -96,10 +98,12 @@ export class Compositor {
     if (activeTerm && activeRect) {
       cursorX = activeRect.x + activeTerm.getCursorX();
       cursorY = activeRect.y + activeTerm.getCursorY();
+      cursorStyle = activeTerm.getCursorStyle();
+      cursorVisible = activeTerm.isCursorVisible();
     }
 
     // Generate output
-    return this.flush(cursorX, cursorY);
+    return this.flush(cursorX, cursorY, cursorStyle, cursorVisible);
   }
 
   private renderPane(term: VirtualTerminal, rect: Rect): void {
@@ -223,7 +227,12 @@ export class Compositor {
     }
   }
 
-  private flush(cursorX: number, cursorY: number): string {
+  private flush(
+    cursorX: number,
+    cursorY: number,
+    cursorStyle: number = 0,
+    cursorVisible: boolean = true,
+  ): string {
     let output = ansi.hideCursor();
 
     const dirty = this.screen.getDirty();
@@ -267,9 +276,13 @@ export class Compositor {
     }
 
     output += ansi.resetStyle();
-    // Position cursor in active pane
+    // Position cursor in active pane with correct style
+    output += ansi.setCursorStyle(cursorStyle);
     output += ansi.moveTo(cursorX, cursorY);
-    output += ansi.showCursor();
+    // Only show cursor if the application wants it visible (DECTCEM)
+    if (cursorVisible) {
+      output += ansi.showCursor();
+    }
 
     this.screen.snapshot();
 

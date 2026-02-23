@@ -11,6 +11,12 @@ export const showCursor = () => `${CSI}?25h`;
 export const saveCursor = () => `${ESC}7`;
 export const restoreCursor = () => `${ESC}8`;
 
+// Cursor shape (DECSCUSR)
+// 0 = default, 1 = blinking block, 2 = steady block,
+// 3 = blinking underline, 4 = steady underline,
+// 5 = blinking bar, 6 = steady bar
+export const setCursorStyle = (style: number) => `${CSI}${style} q`;
+
 // Screen
 export const clearScreen = () => `${CSI}2J`;
 export const clearLine = () => `${CSI}2K`;

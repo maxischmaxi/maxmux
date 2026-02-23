@@ -66,6 +66,7 @@ export class ServerHandler {
   private clientCwd: Map<string, string> = new Map();
   private paneOutputBuffer: Map<string, string> = new Map();
   private static readonly OUTPUT_BUFFER_MAX = 64 * 1024; // 64KB per pane
+  private lastSessionId: string | null = null;
   private autoSaver: AutoSaver | null = null;
   private metricsCollector: MetricsCollector;
   private processTracker: ProcessTracker;
@@ -206,6 +207,10 @@ export class ServerHandler {
         this.sessions.getSessionByName(sessionId);
     }
 
+    if (!session && this.lastSessionId) {
+      session = this.sessions.getSession(this.lastSessionId);
+    }
+
     if (!session) {
       session = this.sessions.getDefaultSession();
     }
@@ -260,6 +265,7 @@ export class ServerHandler {
   private handleDetach(clientId: string): void {
     const sessionId = this.broadcaster.getClientSession(clientId);
     if (sessionId) {
+      this.lastSessionId = sessionId;
       const session = this.sessions.getSession(sessionId);
       if (session) {
         session.attachedClients = session.attachedClients.filter(
@@ -567,7 +573,14 @@ export class ServerHandler {
             // If session has no windows, cleanup
             if (session.windows.length === 0) {
               this.hooks.emit("session:closed", session);
+              const fallbackId = this.migrateClientsFromEmptySession(sessionId);
               this.sessions.deleteSession(sessionId);
+
+              if (fallbackId) {
+                this.broadcastState(fallbackId, true);
+                this.saveImmediate();
+                return;
+              }
             }
           }
         }
@@ -709,7 +722,14 @@ export class ServerHandler {
 
         if (session.windows.length === 0) {
           this.hooks.emit("session:closed", session);
+          const fallbackId = this.migrateClientsFromEmptySession(ctx.sessionId);
           this.sessions.deleteSession(ctx.sessionId);
+
+          if (fallbackId) {
+            this.broadcastState(fallbackId, true);
+            this.saveImmediate();
+            return;
+          }
         }
 
         this.broadcastState(ctx.sessionId, true);
@@ -1099,6 +1119,40 @@ export class ServerHandler {
     }
     // Fallback: default session
     return this.sessions.getDefaultSession();
+  }
+
+  /**
+   * When a session becomes empty (no windows), migrate its clients to
+   * another session instead of letting them disconnect.  Returns the
+   * fallback session ID if clients were migrated, or null if no
+   * fallback session exists (i.e. this was the last session).
+   */
+  private migrateClientsFromEmptySession(sessionId: string): string | null {
+    const clients = this.broadcaster.getSessionClients(sessionId);
+    if (clients.length === 0) return null;
+
+    // Find a fallback session (any session that isn't the one being deleted)
+    const fallback = this.sessions
+      .listSessions()
+      .find((s) => s.id !== sessionId && s.windows.length > 0);
+
+    if (!fallback) return null;
+
+    // Migrate every client to the fallback session
+    const session = this.sessions.getSession(sessionId);
+    for (const clientId of clients) {
+      // Remove from old session's attachedClients
+      if (session) {
+        session.attachedClients = session.attachedClients.filter(
+          (c) => c !== clientId,
+        );
+      }
+      // Attach to fallback
+      this.broadcaster.setClientSession(clientId, fallback.id);
+      fallback.attachedClients.push(clientId);
+    }
+
+    return fallback.id;
   }
 
   private getSessionClientDimensions(sessionId: string): {

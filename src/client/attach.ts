@@ -110,9 +110,23 @@ export async function attachToSession(
     );
 
     if (output) {
-      let out = "\x1b7"; // save cursor
+      let out = ansi.hideCursor();
       out += output;
-      out += "\x1b8"; // restore cursor
+      // Reposition cursor explicitly instead of relying on save/restore
+      // which can propagate stale cursor positions
+      const activeTerm = clientTerminals.get(activePaneId);
+      if (activeTerm) {
+        out += ansi.setCursorStyle(activeTerm.getCursorStyle());
+        const xOffset =
+          sidebarActive && config.sessionList.sidebarPosition === "left"
+            ? sidebarWidth + 1
+            : 0;
+        out += positionCursor(xOffset);
+        // Only show cursor if the application wants it visible (DECTCEM)
+        if (activeTerm.isCursorVisible()) {
+          out += ansi.showCursor();
+        }
+      }
       process.stdout.write(out);
     }
   };
@@ -280,7 +294,8 @@ export async function attachToSession(
         activeRect.y + activeTerm.getCursorY(),
       );
     }
-    return "";
+    // Fallback: hide cursor to avoid ghost cursor at wrong position
+    return ansi.hideCursor();
   };
 
   const renderScreen = () => {
@@ -344,8 +359,15 @@ export async function attachToSession(
       if (isPreviewActive) {
         // Keep cursor hidden — preview is read-only
       } else {
+        const activeTerm = clientTerminals.get(activePaneId);
+        if (activeTerm) {
+          out += ansi.setCursorStyle(activeTerm.getCursorStyle());
+        }
         out += positionCursor(mainXOffset);
-        out += ansi.showCursor();
+        // Only show cursor if the application wants it visible (DECTCEM)
+        if (!activeTerm || activeTerm.isCursorVisible()) {
+          out += ansi.showCursor();
+        }
       }
     } else {
       if (paneRects.size === 0) {
@@ -359,8 +381,15 @@ export async function attachToSession(
       }
 
       out += renderBorders();
+      const activeTerm = clientTerminals.get(activePaneId);
+      if (activeTerm) {
+        out += ansi.setCursorStyle(activeTerm.getCursorStyle());
+      }
       out += positionCursor();
-      out += ansi.showCursor();
+      // Only show cursor if the application wants it visible (DECTCEM)
+      if (!activeTerm || activeTerm.isCursorVisible()) {
+        out += ansi.showCursor();
+      }
     }
 
     process.stdout.write(out);
