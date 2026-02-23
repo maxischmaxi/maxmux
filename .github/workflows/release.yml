@@ -105,9 +105,6 @@ jobs:
 
       - run: bun install
 
-      - name: Set version from tag
-        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
-
       - name: Publish
         run: npm publish
         env:
