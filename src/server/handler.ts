@@ -2,7 +2,12 @@ import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { debugLog } from "../debug.ts";
-import { SessionManager, type Pane } from "../core/session.ts";
+import {
+  SessionManager,
+  type Pane,
+  type Session,
+  type Window,
+} from "../core/session.ts";
 import { PtyManager } from "../core/pty.ts";
 import { TerminalManager } from "../core/terminal.ts";
 import { CommandRegistry, type CommandContext } from "../core/command.ts";
@@ -11,6 +16,7 @@ import {
   splitLayout,
   removeFromLayout,
   getAllPaneIds,
+  findPaneInDirection,
   type Rect,
 } from "../core/layout.ts";
 import { KeybindingRegistry } from "../input/keybindings.ts";
@@ -19,14 +25,32 @@ import { loadPlugins } from "../plugins/loader.ts";
 import { Broadcaster, type ServerMessage } from "./broadcast.ts";
 import type { MaxMuxConfig } from "../config/schema.ts";
 import { AutoSaver } from "../persistence/autosave.ts";
+import {
+  saveSession,
+  loadSavedSessions,
+  serializeSessions,
+  remapLayoutIds,
+  getAllPaneIdsFromSerialized,
+  type SerializedSession,
+} from "../persistence/store.ts";
 import { MetricsCollector } from "./metrics.ts";
+import { ProcessTracker } from "./process-tracker.ts";
+import type { WindowTitleInfo } from "../plugins/types.ts";
 
 export type ClientMessage =
   | { type: "attach"; sessionId?: string; cwd?: string }
   | { type: "detach" }
   | { type: "input"; paneId: string; data: string }
   | { type: "resize"; cols: number; rows: number }
-  | { type: "command"; id: string; args?: Record<string, unknown> };
+  | { type: "command"; id: string; args?: Record<string, unknown> }
+  | { type: "preview"; sessionId: string; cols: number; rows: number }
+  | { type: "preview-stop" }
+  | {
+      type: "remote-command";
+      command: string;
+      args?: Record<string, unknown>;
+      target?: string;
+    };
 
 export class ServerHandler {
   readonly sessions: SessionManager;
@@ -44,6 +68,7 @@ export class ServerHandler {
   private static readonly OUTPUT_BUFFER_MAX = 64 * 1024; // 64KB per pane
   private autoSaver: AutoSaver | null = null;
   private metricsCollector: MetricsCollector;
+  private processTracker: ProcessTracker;
 
   constructor(config: MaxMuxConfig) {
     this.config = config;
@@ -56,6 +81,7 @@ export class ServerHandler {
     this.broadcaster = new Broadcaster();
 
     this.metricsCollector = new MetricsCollector();
+    this.processTracker = new ProcessTracker();
     this.keybindings.loadFromConfig(config.keybindings);
     this.registerDefaultCommands();
   }
@@ -63,6 +89,14 @@ export class ServerHandler {
   async init(): Promise<void> {
     // Load plugins
     await loadPlugins(this.config, this.commands, this.keybindings, this.hooks);
+
+    // Restore sessions from disk
+    if (this.config.sessions.autoRestore) {
+      const saved = await loadSavedSessions(this.config.sessions.savePath);
+      for (const s of saved) {
+        this.restoreSession(s);
+      }
+    }
 
     // Start auto-save
     if (this.config.sessions.autoSave) {
@@ -72,6 +106,32 @@ export class ServerHandler {
         this.config.sessions.savePath,
       );
       this.autoSaver.start();
+    }
+
+    // Start process tracker for dynamic window titles
+    if (this.config.automaticRename) {
+      this.processTracker.start(
+        this.config.automaticRenameInterval,
+        () => {
+          const panes: Array<{ paneId: string; pid: number; command: string }> =
+            [];
+          for (const session of this.sessions.listSessions()) {
+            for (const window of session.windows) {
+              for (const pane of window.panes) {
+                panes.push({
+                  paneId: pane.id,
+                  pid: pane.pid,
+                  command: pane.command,
+                });
+              }
+            }
+          }
+          return panes;
+        },
+        (paneId, processName) => {
+          this.handleProcessChange(paneId, processName);
+        },
+      );
     }
 
     // Start metrics collection
@@ -101,7 +161,7 @@ export class ServerHandler {
         );
       }
     }
-    this.broadcaster.removeClient(clientId);
+    this.broadcaster.removeClient(clientId); // also clears preview state
     this.clientCols.delete(clientId);
     this.clientRows.delete(clientId);
     this.clientCwd.delete(clientId);
@@ -124,6 +184,15 @@ export class ServerHandler {
         break;
       case "command":
         this.handleCommand(clientId, msg.id, msg.args);
+        break;
+      case "preview":
+        this.handlePreview(clientId, msg.sessionId, msg.cols, msg.rows);
+        break;
+      case "preview-stop":
+        this.handlePreviewStop(clientId);
+        break;
+      case "remote-command":
+        this.handleRemoteCommand(clientId, msg.command, msg.args, msg.target);
         break;
     }
   }
@@ -151,32 +220,19 @@ export class ServerHandler {
     this.broadcaster.setClientSession(clientId, session.id);
 
     // If session has no windows, create one
+    // Skip broadcast — sendStateToClient below will send everything
     if (session.windows.length === 0) {
       const cols = this.clientCols.get(clientId) || 80;
       const rows = this.clientRows.get(clientId) || 24;
-      this.createWindowWithPane(session.id, cols, rows);
+      this.createWindowWithPane(session.id, cols, rows, undefined, true, false);
     }
 
-    // Send current state (sets activePaneId on client)
+    // Send current state + layout + output replay (all batched via cork/uncork)
+    // sendStateToClient already replays output buffer for active window panes
     this.sendStateToClient(clientId);
 
-    // Replay buffered output for all panes in active window
-    // This restores the terminal content that was visible before detach
-    const activeWindow = this.sessions.getActiveWindow(session.id);
-    if (activeWindow) {
-      for (const pane of activeWindow.panes) {
-        const buffered = this.paneOutputBuffer.get(pane.id);
-        if (buffered) {
-          this.broadcaster.send(clientId, {
-            type: "output",
-            paneId: pane.id,
-            data: buffered,
-          });
-        }
-      }
-    }
-
     // Update metrics with cwd and pane info
+    const activeWindow = this.sessions.getActiveWindow(session.id);
     const clientCwd = this.clientCwd.get(clientId);
     if (clientCwd) {
       this.metricsCollector.setCwd(clientCwd);
@@ -194,8 +250,8 @@ export class ServerHandler {
       data: this.metricsCollector.getMetrics(),
     });
 
-    // Force PTY redraw: send SIGWINCH to all panes in active window
-    // This makes the shell redraw its prompt at the correct position
+    // Ensure PTYs are sized correctly for this client.
+    // PtyManager dedup prevents unnecessary SIGWINCH if sizes match.
     const cols = this.clientCols.get(clientId) || 80;
     const rows = this.clientRows.get(clientId) || 24;
     this.handleResize(clientId, cols, rows);
@@ -253,6 +309,12 @@ export class ServerHandler {
     commandId: string,
     args?: Record<string, unknown>,
   ): void {
+    // session:create needs clientId for attach — handle specially
+    if (commandId === "session:create") {
+      this.handleSessionCreate(clientId, args);
+      return;
+    }
+
     const sessionId = this.broadcaster.getClientSession(clientId);
     if (!sessionId) return;
 
@@ -274,20 +336,129 @@ export class ServerHandler {
     }
   }
 
+  private handleSessionCreate(
+    clientId: string,
+    args?: Record<string, unknown>,
+  ): void {
+    const name = (args?.name as string | undefined) || undefined;
+
+    // Remove client from current session
+    const oldSessionId = this.broadcaster.getClientSession(clientId);
+    if (oldSessionId) {
+      const oldSession = this.sessions.getSession(oldSessionId);
+      if (oldSession) {
+        oldSession.attachedClients = oldSession.attachedClients.filter(
+          (c) => c !== clientId,
+        );
+      }
+    }
+
+    // Create new session and attach client
+    const session = this.sessions.createSession(name);
+    this.hooks.emit("session:created", session);
+    session.attachedClients.push(clientId);
+    this.broadcaster.setClientSession(clientId, session.id);
+
+    // Create a window with a pane (skip broadcast — sendStateToClient below handles it)
+    const sessionCols = this.clientCols.get(clientId) || 80;
+    const sessionRows = this.clientRows.get(clientId) || 24;
+    this.createWindowWithPane(
+      session.id,
+      sessionCols,
+      sessionRows,
+      undefined,
+      true,
+      false,
+    );
+
+    // Send state to client (includes window switch + output replay)
+    this.sendStateToClient(clientId);
+
+    // Broadcast updated state to old session's clients
+    if (oldSessionId) {
+      this.broadcastState(oldSessionId);
+    }
+
+    this.saveImmediate();
+  }
+
+  private handlePreview(
+    clientId: string,
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): void {
+    const session = this.sessions.getSession(sessionId);
+    if (!session) return;
+
+    this.broadcaster.setClientPreview(clientId, sessionId, cols, rows);
+
+    const window = this.sessions.getActiveWindow(sessionId);
+    if (!window) return;
+
+    // Cork for batched delivery
+    this.broadcaster.cork(clientId);
+
+    // Calculate layout at preview dimensions
+    const paneRects = calculateLayout(window.layout, {
+      x: 0,
+      y: 0,
+      width: cols,
+      height: rows - 1,
+    });
+
+    const rectsObj: Record<string, Rect> = {};
+    for (const [id, rect] of paneRects) {
+      rectsObj[id] = rect;
+    }
+
+    this.broadcaster.send(clientId, {
+      type: "preview-layout",
+      layout: window.layout,
+      paneRects: rectsObj,
+    });
+
+    // Replay output buffer for all panes in preview session's active window
+    for (const pane of window.panes) {
+      const buffered = this.paneOutputBuffer.get(pane.id);
+      if (buffered) {
+        this.broadcaster.send(clientId, {
+          type: "preview-output",
+          paneId: pane.id,
+          data: buffered,
+        });
+      }
+    }
+
+    this.broadcaster.uncork(clientId);
+  }
+
+  private handlePreviewStop(clientId: string): void {
+    this.broadcaster.clearClientPreview(clientId);
+  }
+
   private createWindowWithPane(
     sessionId: string,
     cols: number,
     rows: number,
     name?: string,
+    switchTo = true,
+    broadcast = true,
   ): void {
     const window = this.sessions.addWindow(sessionId, name);
     if (!window) return;
+
+    if (switchTo) {
+      const session = this.sessions.getSession(sessionId);
+      if (session) session.activeWindow = window.id;
+    }
 
     const paneId = getAllPaneIds(window.layout)[0]!;
     this.spawnPaneProcess(sessionId, window.id, paneId, cols, rows - 1);
 
     this.hooks.emit("window:created", window);
-    this.broadcastState(sessionId);
+    if (broadcast) this.broadcastState(sessionId, true);
+    this.saveImmediate();
   }
 
   private spawnPaneProcess(
@@ -296,16 +467,19 @@ export class ServerHandler {
     paneId: string,
     cols: number,
     rows: number,
+    cwdOverride?: string,
   ): void {
-    // Use the cwd of the first attached client, fall back to HOME
-    let cwd = process.env.HOME || homedir();
-    const session = this.sessions.getSession(sessionId);
-    if (session) {
-      for (const cid of session.attachedClients) {
-        const clientCwd = this.clientCwd.get(cid);
-        if (clientCwd) {
-          cwd = clientCwd;
-          break;
+    // Use override cwd (e.g. from session restore), or the cwd of the first attached client, fall back to HOME
+    let cwd = cwdOverride || process.env.HOME || homedir();
+    if (!cwdOverride) {
+      const session = this.sessions.getSession(sessionId);
+      if (session) {
+        for (const cid of session.attachedClients) {
+          const clientCwd = this.clientCwd.get(cid);
+          if (clientCwd) {
+            cwd = clientCwd;
+            break;
+          }
         }
       }
     }
@@ -318,7 +492,13 @@ export class ServerHandler {
     );
 
     // Create virtual terminal
-    this.terminals.create(paneId, safeCols, safeRows);
+    const serverTerm = this.terminals.create(paneId, safeCols, safeRows);
+
+    // Forward terminal query responses (DA, DSR, etc.) back to the PTY
+    // so programs like fzf that query terminal capabilities get a reply
+    serverTerm.onData((response) => {
+      this.ptys.write(paneId, response);
+    });
 
     // Spawn PTY
     this.ptys.spawn(
@@ -349,10 +529,17 @@ export class ServerHandler {
           paneId,
           data,
         });
+        // Forward to preview clients watching this session
+        this.broadcaster.sendPreviewToSession(sessionId, {
+          type: "preview-output",
+          paneId,
+          data,
+        });
       },
       (exitCode: number) => {
         this.terminals.remove(paneId);
         this.paneOutputBuffer.delete(paneId);
+        this.processTracker.removePanes([paneId]);
         this.sessions.removePaneFromWindow(sessionId, windowId, paneId);
 
         const window = this.sessions.getActiveWindow(sessionId);
@@ -385,7 +572,8 @@ export class ServerHandler {
           }
         }
 
-        this.broadcastState(sessionId);
+        this.broadcastState(sessionId, true);
+        this.saveImmediate();
       },
     );
 
@@ -401,11 +589,65 @@ export class ServerHandler {
     this.hooks.emit("pane:created", pane);
   }
 
+  private async saveImmediate(): Promise<void> {
+    if (!this.config.sessions.autoSave) return;
+    await saveSession(this.sessions, this.config.sessions.savePath);
+    this.hooks.emit("session:saved", {
+      sessions: serializeSessions(this.sessions),
+    });
+  }
+
+  private restoreSession(data: SerializedSession): void {
+    const session = this.sessions.createSession(data.name);
+
+    for (const wData of data.windows) {
+      const window = this.sessions.addWindow(session.id, wData.name);
+      if (!window) continue;
+
+      const oldToNew = new Map<string, string>();
+      const oldPaneIds = getAllPaneIdsFromSerialized(wData.layout);
+      const defaultPaneId = getAllPaneIds(window.layout)[0]!;
+
+      for (let i = 0; i < oldPaneIds.length; i++) {
+        if (i === 0) {
+          oldToNew.set(oldPaneIds[i]!, defaultPaneId);
+        } else {
+          oldToNew.set(oldPaneIds[i]!, randomUUID().slice(0, 8));
+        }
+      }
+
+      window.layout = remapLayoutIds(wData.layout, oldToNew);
+
+      const cols = 80;
+      const rows = 24;
+      for (const pData of wData.panes) {
+        const newId = oldToNew.get(pData.id) || defaultPaneId;
+        this.spawnPaneProcess(
+          session.id,
+          window.id,
+          newId,
+          cols,
+          rows - 1,
+          pData.cwd,
+        );
+      }
+
+      if (wData.activePane && oldToNew.has(wData.activePane)) {
+        window.activePane = oldToNew.get(wData.activePane)!;
+      }
+    }
+
+    if (session.windows.length > 0) {
+      session.activeWindow = session.windows[0]!.id;
+    }
+  }
+
   private registerDefaultCommands(): void {
     this.commands.register({
       id: "window:create",
       description: "Create a new window",
       execute: (ctx) => {
+        const switchTo = this.config.switchToNewWindow;
         const cols = 80;
         const rows = 24;
         // Use first client's dimensions if available
@@ -414,11 +656,17 @@ export class ServerHandler {
           if (sid === ctx.sessionId) {
             const c = this.clientCols.get(cid) || 80;
             const r = this.clientRows.get(cid) || 24;
-            this.createWindowWithPane(ctx.sessionId, c, r);
+            this.createWindowWithPane(ctx.sessionId, c, r, undefined, switchTo);
             return;
           }
         }
-        this.createWindowWithPane(ctx.sessionId, cols, rows);
+        this.createWindowWithPane(
+          ctx.sessionId,
+          cols,
+          rows,
+          undefined,
+          switchTo,
+        );
       },
     });
 
@@ -427,7 +675,7 @@ export class ServerHandler {
       description: "Switch to next window",
       execute: (ctx) => {
         this.sessions.switchWindow(ctx.sessionId, "next");
-        this.broadcastState(ctx.sessionId);
+        this.broadcastState(ctx.sessionId, true);
       },
     });
 
@@ -436,7 +684,7 @@ export class ServerHandler {
       description: "Switch to previous window",
       execute: (ctx) => {
         this.sessions.switchWindow(ctx.sessionId, "previous");
-        this.broadcastState(ctx.sessionId);
+        this.broadcastState(ctx.sessionId, true);
       },
     });
 
@@ -464,7 +712,8 @@ export class ServerHandler {
           this.sessions.deleteSession(ctx.sessionId);
         }
 
-        this.broadcastState(ctx.sessionId);
+        this.broadcastState(ctx.sessionId, true);
+        this.saveImmediate();
       },
     });
 
@@ -518,7 +767,8 @@ export class ServerHandler {
           }
         }
 
-        this.broadcastState(ctx.sessionId);
+        this.broadcastState(ctx.sessionId, true);
+        this.saveImmediate();
       },
     });
 
@@ -527,6 +777,14 @@ export class ServerHandler {
       description: "Detach from session",
       execute: (_ctx) => {
         // This is handled client-side
+      },
+    });
+
+    this.commands.register({
+      id: "session:create",
+      description: "Create a new session",
+      execute: (_ctx) => {
+        // Handled specially in handleCommand (needs clientId)
       },
     });
 
@@ -618,6 +876,7 @@ export class ServerHandler {
           if (session) {
             session.name = newName;
             this.broadcastState(ctx.sessionId);
+            this.saveImmediate();
           }
         }
       },
@@ -691,9 +950,10 @@ export class ServerHandler {
 
     window.activePane = newPaneId;
     this.broadcastState(sessionId);
+    this.saveImmediate();
   }
 
-  sendStateToClient(clientId: string): void {
+  sendStateToClient(clientId: string, replay = true): void {
     const sessionId = this.broadcaster.getClientSession(clientId);
     if (!sessionId) return;
 
@@ -743,15 +1003,19 @@ export class ServerHandler {
       });
 
       // Replay buffered output for all panes in the active window
-      // so that window switches restore visible terminal content
-      for (const pane of window.panes) {
-        const buffered = this.paneOutputBuffer.get(pane.id);
-        if (buffered) {
-          this.broadcaster.send(clientId, {
-            type: "output",
-            paneId: pane.id,
-            data: buffered,
-          });
+      // so that window switches restore visible terminal content.
+      // Skip replay for pure state updates (e.g. pane:focus) to avoid
+      // duplicating output into client VirtualTerminals that already have it.
+      if (replay) {
+        for (const pane of window.panes) {
+          const buffered = this.paneOutputBuffer.get(pane.id);
+          if (buffered) {
+            this.broadcaster.send(clientId, {
+              type: "output",
+              paneId: pane.id,
+              data: buffered,
+            });
+          }
         }
       }
     }
@@ -777,14 +1041,416 @@ export class ServerHandler {
     });
   }
 
-  broadcastState(sessionId: string): void {
+  broadcastState(sessionId: string, replay = false): void {
     const clients = this.broadcaster.getSessionClients(sessionId);
     for (const clientId of clients) {
-      this.sendStateToClient(clientId);
+      this.sendStateToClient(clientId, replay);
+    }
+  }
+
+  private handleProcessChange(paneId: string, processName: string): void {
+    // Find which session/window this pane belongs to
+    for (const session of this.sessions.listSessions()) {
+      for (const window of session.windows) {
+        const pane = window.panes.find((p) => p.id === paneId);
+        if (!pane) continue;
+
+        // Update pane title
+        pane.title = processName;
+
+        // Build default window title from all pane processes
+        const processes = window.panes.map((p) => ({
+          paneId: p.id,
+          name: p.title,
+        }));
+        const defaultTitle = processes.map((p) => p.name).join(", ");
+
+        // Run through plugin waterfall
+        const info: WindowTitleInfo = {
+          windowId: window.id,
+          title: defaultTitle,
+          processes,
+        };
+        const result = this.hooks.emitWaterfall("window:title", info);
+
+        // Only broadcast if title actually changed
+        if (window.name !== result.title) {
+          window.name = result.title;
+          this.broadcastState(session.id);
+        }
+        return;
+      }
+    }
+  }
+
+  // --- Remote CLI command handling ---
+
+  private resolveSessionForCli(target?: string): Session | undefined {
+    // Explicit target: match by name or ID
+    if (target) {
+      return (
+        this.sessions.getSessionByName(target) ||
+        this.sessions.getSession(target)
+      );
+    }
+    // First session with attached clients
+    for (const session of this.sessions.listSessions()) {
+      if (session.attachedClients.length > 0) return session;
+    }
+    // Fallback: default session
+    return this.sessions.getDefaultSession();
+  }
+
+  private getSessionClientDimensions(sessionId: string): {
+    cols: number;
+    rows: number;
+  } {
+    for (const [cid] of this.clientCols) {
+      const sid = this.broadcaster.getClientSession(cid);
+      if (sid === sessionId) {
+        return {
+          cols: this.clientCols.get(cid) || 80,
+          rows: this.clientRows.get(cid) || 24,
+        };
+      }
+    }
+    return { cols: 80, rows: 24 };
+  }
+
+  private resolveFormatVariable(
+    name: string,
+    session: Session,
+    window: Window,
+    paneRects: Map<string, Rect>,
+  ): string {
+    switch (name) {
+      case "session_name":
+        return session.name;
+      case "session_id":
+        return session.id;
+      case "window_name":
+        return window.name;
+      case "window_id":
+        return window.id;
+      case "window_index": {
+        const idx = session.windows.findIndex((w) => w.id === window.id);
+        return String(idx >= 0 ? idx : 0);
+      }
+      case "pane_id":
+        return window.activePane;
+      case "pane_index": {
+        const idx = window.panes.findIndex((p) => p.id === window.activePane);
+        return String(idx >= 0 ? idx : 0);
+      }
+      case "pane_at_left":
+        return findPaneInDirection(paneRects, window.activePane, "left")
+          ? "0"
+          : "1";
+      case "pane_at_right":
+        return findPaneInDirection(paneRects, window.activePane, "right")
+          ? "0"
+          : "1";
+      case "pane_at_top":
+        return findPaneInDirection(paneRects, window.activePane, "up")
+          ? "0"
+          : "1";
+      case "pane_at_bottom":
+        return findPaneInDirection(paneRects, window.activePane, "down")
+          ? "0"
+          : "1";
+      default:
+        return `#{${name}}`;
+    }
+  }
+
+  private handleRemoteCommand(
+    clientId: string,
+    command: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    try {
+      switch (command) {
+        case "select-pane":
+          this.handleRemoteSelectPane(clientId, args, target);
+          break;
+        case "display-message":
+          this.handleRemoteDisplayMessage(clientId, args, target);
+          break;
+        case "select-window":
+          this.handleRemoteSelectWindow(clientId, args, target);
+          break;
+        case "split-window":
+          this.handleRemoteSplitWindow(clientId, args, target);
+          break;
+        case "new-window":
+          this.handleRemoteNewWindow(clientId, args, target);
+          break;
+        case "send-command":
+          this.handleRemoteSendCommand(clientId, args, target);
+          break;
+        default:
+          this.broadcaster.send(clientId, {
+            type: "result",
+            success: false,
+            error: `Unknown remote command: ${command}`,
+          });
+      }
+    } catch (err) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: String(err),
+      });
+    }
+  }
+
+  private handleRemoteSelectPane(
+    clientId: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const direction = args?.direction as
+      | "up"
+      | "down"
+      | "left"
+      | "right"
+      | undefined;
+    if (!direction) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No direction specified",
+      });
+      return;
+    }
+
+    const window = this.sessions.getActiveWindow(session.id);
+    if (!window) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No active window",
+      });
+      return;
+    }
+
+    const { cols, rows } = this.getSessionClientDimensions(session.id);
+    const paneRects = calculateLayout(window.layout, {
+      x: 0,
+      y: 0,
+      width: cols,
+      height: rows - 1,
+    });
+    const targetPane = findPaneInDirection(
+      paneRects,
+      window.activePane,
+      direction,
+    );
+
+    if (targetPane) {
+      this.sessions.setActivePane(session.id, targetPane);
+      this.broadcastState(session.id);
+      this.broadcaster.send(clientId, { type: "result", success: true });
+    } else {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No pane in that direction",
+      });
+    }
+  }
+
+  private handleRemoteDisplayMessage(
+    clientId: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const format = args?.format as string | undefined;
+    if (!format) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No format string",
+      });
+      return;
+    }
+
+    const window = this.sessions.getActiveWindow(session.id);
+    if (!window) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No active window",
+      });
+      return;
+    }
+
+    const { cols, rows } = this.getSessionClientDimensions(session.id);
+    const paneRects = calculateLayout(window.layout, {
+      x: 0,
+      y: 0,
+      width: cols,
+      height: rows - 1,
+    });
+
+    const result = format.replace(/#\{(\w+)\}/g, (_match, name: string) => {
+      return this.resolveFormatVariable(name, session, window, paneRects);
+    });
+
+    this.broadcaster.send(clientId, {
+      type: "result",
+      success: true,
+      data: result,
+    });
+  }
+
+  private handleRemoteSelectWindow(
+    clientId: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const direction = args?.direction as "next" | "previous" | undefined;
+    if (!direction) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No direction specified",
+      });
+      return;
+    }
+
+    this.sessions.switchWindow(session.id, direction);
+    this.broadcastState(session.id, true);
+    this.broadcaster.send(clientId, { type: "result", success: true });
+  }
+
+  private handleRemoteSplitWindow(
+    clientId: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const direction = args?.direction as "horizontal" | "vertical" | undefined;
+    if (!direction) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No direction specified",
+      });
+      return;
+    }
+
+    this.splitPane(session.id, direction);
+    this.broadcaster.send(clientId, { type: "result", success: true });
+  }
+
+  private handleRemoteNewWindow(
+    clientId: string,
+    _args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const { cols, rows } = this.getSessionClientDimensions(session.id);
+    this.createWindowWithPane(session.id, cols, rows);
+    this.broadcaster.send(clientId, { type: "result", success: true });
+  }
+
+  private handleRemoteSendCommand(
+    clientId: string,
+    args?: Record<string, unknown>,
+    target?: string,
+  ): void {
+    const session = this.resolveSessionForCli(target);
+    if (!session) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No session found",
+      });
+      return;
+    }
+
+    const commandId = args?.id as string | undefined;
+    if (!commandId) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: "No command ID specified",
+      });
+      return;
+    }
+
+    const window = this.sessions.getActiveWindow(session.id);
+    const ctx: CommandContext = {
+      sessionId: session.id,
+      windowId: window?.id,
+      paneId: window?.activePane,
+      args: args?.commandArgs as Record<string, unknown> | undefined,
+    };
+
+    try {
+      this.commands.execute(commandId, ctx);
+      this.broadcaster.send(clientId, { type: "result", success: true });
+    } catch (err) {
+      this.broadcaster.send(clientId, {
+        type: "result",
+        success: false,
+        error: String(err),
+      });
     }
   }
 
   shutdown(): void {
+    this.processTracker.stop();
     this.metricsCollector.stop();
     if (this.autoSaver) {
       this.autoSaver.stop();

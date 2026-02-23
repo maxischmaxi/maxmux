@@ -1,13 +1,8 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-} from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { SessionManager } from "../core/session.ts";
+import type { LayoutNode } from "../core/session.ts";
 
 export interface SerializedPane {
   id: string;
@@ -36,14 +31,10 @@ function resolvePath(savePath: string): string {
   return savePath.replace(/^~/, homedir());
 }
 
-export function saveSession(sessions: SessionManager, savePath: string): void {
-  const dir = resolvePath(savePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  const sessionList = sessions.listSessions();
-  const data: SerializedSession[] = sessionList.map((s) => ({
+export function serializeSessions(
+  sessions: SessionManager,
+): SerializedSession[] {
+  return sessions.listSessions().map((s) => ({
     id: s.id,
     name: s.name,
     windows: s.windows.map((w) => ({
@@ -61,23 +52,66 @@ export function saveSession(sessions: SessionManager, savePath: string): void {
     activeWindow: s.activeWindow,
     createdAt: s.createdAt,
   }));
-
-  const filePath = join(dir, "sessions.json");
-  writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-export function loadSavedSessions(savePath: string): SerializedSession[] {
+export async function saveSession(
+  sessions: SessionManager,
+  savePath: string,
+): Promise<void> {
+  const dir = resolvePath(savePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const data = serializeSessions(sessions);
+  const filePath = join(dir, "sessions.json");
+  await Bun.write(filePath, JSON.stringify(data, null, 2));
+}
+
+export async function loadSavedSessions(
+  savePath: string,
+): Promise<SerializedSession[]> {
   const dir = resolvePath(savePath);
   const filePath = join(dir, "sessions.json");
 
-  if (!existsSync(filePath)) {
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) {
     return [];
   }
 
   try {
-    const content = readFileSync(filePath, "utf-8");
+    const content = await file.text();
     return JSON.parse(content) as SerializedSession[];
   } catch {
     return [];
   }
+}
+
+export function remapLayoutIds(
+  layout: LayoutNode,
+  mapping: Map<string, string>,
+): LayoutNode {
+  if (layout.type === "leaf") {
+    return {
+      type: "leaf",
+      paneId: mapping.get(layout.paneId) || layout.paneId,
+    };
+  }
+  return {
+    type: "split",
+    direction: layout.direction,
+    ratio: layout.ratio,
+    children: [
+      remapLayoutIds(layout.children[0], mapping),
+      remapLayoutIds(layout.children[1], mapping),
+    ],
+  };
+}
+
+export function getAllPaneIdsFromSerialized(layout: any): string[] {
+  if (layout.type === "leaf") return [layout.paneId];
+  return [
+    ...getAllPaneIdsFromSerialized(layout.children[0]),
+    ...getAllPaneIdsFromSerialized(layout.children[1]),
+  ];
 }

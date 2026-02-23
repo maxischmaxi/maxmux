@@ -20,13 +20,21 @@ export class VirtualTerminal {
     this.terminal.write(data, onProcessed);
   }
 
+  onWriteParsed(listener: () => void): { dispose: () => void } {
+    return this.terminal.onWriteParsed(listener);
+  }
+
+  onData(listener: (data: string) => void): { dispose: () => void } {
+    return this.terminal.onData(listener);
+  }
+
   resize(cols: number, rows: number): void {
     this.terminal.resize(cols, rows);
   }
 
   getLine(row: number): string {
     const buffer = this.terminal.buffer.active;
-    const line = buffer.getLine(row);
+    const line = buffer.getLine(buffer.baseY + row);
     if (!line) return "";
     return line.translateToString(true);
   }
@@ -74,7 +82,7 @@ export class VirtualTerminal {
     }[][] = [];
 
     for (let y = 0; y < this.terminal.rows; y++) {
-      const line = buffer.getLine(y);
+      const line = buffer.getLine(buffer.baseY + y);
       const row: {
         char: string;
         fg: string;
@@ -154,7 +162,7 @@ export class VirtualTerminal {
    */
   renderLine(row: number): string {
     const buffer = this.terminal.buffer.active;
-    const line = buffer.getLine(row);
+    const line = buffer.getLine(buffer.baseY + row);
     if (!line) return "\x1b[0m" + " ".repeat(this.terminal.cols);
 
     const CM_RGB = 0x03000000;

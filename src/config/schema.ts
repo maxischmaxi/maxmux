@@ -78,10 +78,21 @@ export const SessionsConfigSchema = z.object({
   savePath: z.string().default("~/.maxmux/sessions/"),
 });
 
+export const SessionListConfigSchema = z.object({
+  mode: z.enum(["sidebar", "overlay"]).default("sidebar"),
+  sidebarPosition: z.enum(["left", "right"]).default("left"),
+  sidebarWidth: z.number().min(20).max(80).default(30),
+});
+
+export type SessionListConfig = z.infer<typeof SessionListConfigSchema>;
+
 export const ConfigSchema = z.object({
   prefixKey: z.string().default("C-a"),
   prefixTimeout: z.number().default(0),
   shell: z.string().default(process.env.SHELL || "/bin/bash"),
+  switchToNewWindow: z.boolean().default(true),
+  automaticRename: z.boolean().default(true),
+  automaticRenameInterval: z.number().default(500),
   theme: ThemeSchema.default(() => ({
     statusBar: { bg: "#1e1e2e", fg: "#cdd6f4", active: "#89b4fa" },
     border: {
@@ -109,6 +120,11 @@ export const ConfigSchema = z.object({
     modules: {},
     refreshInterval: 1000,
     metricsInterval: 5000,
+  })),
+  sessionList: SessionListConfigSchema.default(() => ({
+    mode: "sidebar" as const,
+    sidebarPosition: "left" as const,
+    sidebarWidth: 30,
   })),
   plugins: z.array(z.any()).default(() => []),
 });

@@ -1,4 +1,4 @@
-import type { PluginEvents, StatusBarItem } from "./types.ts";
+import type { PluginEvents } from "./types.ts";
 
 type EventHandler = (...args: any[]) => any;
 
@@ -22,15 +22,12 @@ export class HookRegistry {
     }
   }
 
-  emitWaterfall(
-    event: "render:statusbar",
-    items: StatusBarItem[],
-  ): StatusBarItem[] {
+  emitWaterfall<T>(event: string, initial: T): T {
     const handlers = this.handlers.get(event);
-    if (!handlers) return items;
-    let result = items;
+    if (!handlers) return initial;
+    let result = initial;
     for (const handler of handlers) {
-      result = handler(result) || result;
+      result = (handler as (val: T) => T)(result) ?? result;
     }
     return result;
   }

@@ -17,6 +17,7 @@ export const DEFAULT_KEYBINDINGS: Record<string, string> = {
   Right: "pane:focus-right",
   s: "session:list",
   f: "session:find",
+  N: "session:create",
   $: "session:rename",
   d: "session:detach",
   Q: "server:kill",
@@ -30,6 +31,9 @@ export const DEFAULT_CONFIG: MaxMuxConfig = {
   prefixKey: "C-a",
   prefixTimeout: 0,
   shell: process.env.SHELL || "/bin/bash",
+  switchToNewWindow: true,
+  automaticRename: true,
+  automaticRenameInterval: 500,
   theme: {
     statusBar: {
       bg: "#1e1e2e",
@@ -61,6 +65,11 @@ export const DEFAULT_CONFIG: MaxMuxConfig = {
     autoSaveInterval: 30_000,
     autoRestore: true,
     savePath: "~/.maxmux/sessions/",
+  },
+  sessionList: {
+    mode: "sidebar",
+    sidebarPosition: "left",
+    sidebarWidth: 30,
   },
   plugins: [],
 };

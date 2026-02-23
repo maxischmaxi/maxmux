@@ -15,11 +15,21 @@ export type ServerMessage =
     }
   | { type: "pane:exited"; paneId: string; exitCode: number }
   | { type: "metrics"; data: SystemMetrics }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "result"; success: boolean; data?: string; error?: string }
+  | { type: "preview-output"; paneId: string; data: string }
+  | {
+      type: "preview-layout";
+      layout: any;
+      paneRects: Record<string, any>;
+    };
 
 export class Broadcaster {
   private clients: Map<string, Socket> = new Map();
   private clientSessions: Map<string, string> = new Map(); // clientId -> sessionId
+  private clientPreviews: Map<string, string> = new Map(); // clientId -> preview sessionId
+  private clientPreviewDimensions: Map<string, { cols: number; rows: number }> =
+    new Map();
 
   addClient(id: string, socket: Socket): void {
     this.clients.set(id, socket);
@@ -28,6 +38,8 @@ export class Broadcaster {
   removeClient(id: string): void {
     this.clients.delete(id);
     this.clientSessions.delete(id);
+    this.clientPreviews.delete(id);
+    this.clientPreviewDimensions.delete(id);
   }
 
   setClientSession(clientId: string, sessionId: string): void {
@@ -36,6 +48,39 @@ export class Broadcaster {
 
   getClientSession(clientId: string): string | undefined {
     return this.clientSessions.get(clientId);
+  }
+
+  setClientPreview(
+    clientId: string,
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): void {
+    this.clientPreviews.set(clientId, sessionId);
+    this.clientPreviewDimensions.set(clientId, { cols, rows });
+  }
+
+  clearClientPreview(clientId: string): void {
+    this.clientPreviews.delete(clientId);
+    this.clientPreviewDimensions.delete(clientId);
+  }
+
+  getClientPreview(clientId: string): string | undefined {
+    return this.clientPreviews.get(clientId);
+  }
+
+  getClientPreviewDimensions(
+    clientId: string,
+  ): { cols: number; rows: number } | undefined {
+    return this.clientPreviewDimensions.get(clientId);
+  }
+
+  sendPreviewToSession(sessionId: string, message: ServerMessage): void {
+    for (const [clientId, sid] of this.clientPreviews) {
+      if (sid === sessionId) {
+        this.send(clientId, message);
+      }
+    }
   }
 
   send(clientId: string, message: ServerMessage): void {

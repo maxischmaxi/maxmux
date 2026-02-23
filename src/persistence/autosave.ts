@@ -27,9 +27,9 @@ export class AutoSaver {
     }
   }
 
-  saveNow(): void {
+  async saveNow(): Promise<void> {
     try {
-      saveSession(this.sessions, this.savePath);
+      await saveSession(this.sessions, this.savePath);
     } catch (err) {
       console.error("Auto-save failed:", err);
     }

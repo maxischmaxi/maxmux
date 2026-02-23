@@ -8,6 +8,7 @@ export interface PtyHandle {
 
 export class PtyManager {
   private ptys: Map<string, PtyHandle> = new Map();
+  private ptySizes: Map<string, { cols: number; rows: number }> = new Map();
 
   spawn(
     id: string,
@@ -26,12 +27,14 @@ export class PtyManager {
       onData,
       onExit: (exitCode) => {
         this.ptys.delete(id);
+        this.ptySizes.delete(id);
         onExit(exitCode);
       },
     });
 
     const handle: PtyHandle = { id, pty: p, pid: p.pid };
     this.ptys.set(id, handle);
+    this.ptySizes.set(id, { cols: Math.max(1, cols), rows: Math.max(1, rows) });
     return handle;
   }
 
@@ -44,9 +47,15 @@ export class PtyManager {
 
   resize(id: string, cols: number, rows: number): void {
     const handle = this.ptys.get(id);
-    if (handle) {
-      handle.pty.resize(Math.max(1, cols), Math.max(1, rows));
-    }
+    if (!handle) return;
+    const safeCols = Math.max(1, cols);
+    const safeRows = Math.max(1, rows);
+    // Skip resize if dimensions are unchanged to avoid unnecessary SIGWINCH
+    const current = this.ptySizes.get(id);
+    if (current && current.cols === safeCols && current.rows === safeRows)
+      return;
+    this.ptySizes.set(id, { cols: safeCols, rows: safeRows });
+    handle.pty.resize(safeCols, safeRows);
   }
 
   resizeAll(cols: number, rows: number): void {
@@ -60,6 +69,7 @@ export class PtyManager {
     if (handle) {
       handle.pty.destroy();
       this.ptys.delete(id);
+      this.ptySizes.delete(id);
     }
   }
 
@@ -68,6 +78,7 @@ export class PtyManager {
       handle.pty.destroy();
     }
     this.ptys.clear();
+    this.ptySizes.clear();
   }
 
   get(id: string): PtyHandle | undefined {

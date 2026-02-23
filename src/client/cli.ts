@@ -8,6 +8,62 @@ import {
 import type { ClientMessage } from "../server/handler.ts";
 import type { ServerMessage } from "../server/broadcast.ts";
 
+interface RemoteResult {
+  success: boolean;
+  data?: string;
+  error?: string;
+}
+
+function sendRemoteCommand(msg: ClientMessage): Promise<RemoteResult> {
+  return new Promise(async (resolve, reject) => {
+    const running = await isServerRunning();
+    if (!running) {
+      reject(new Error("Server is not running. Start with: maxmux"));
+      return;
+    }
+
+    const socketPath = getSocketPath();
+    const socket = connect(socketPath);
+    let buffer = "";
+    let done = false;
+
+    const finish = (result: RemoteResult) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.on("connect", () => {
+      socket.write(JSON.stringify(msg) + "\n");
+    });
+
+    socket.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line) as ServerMessage;
+          if (parsed.type === "result") {
+            finish(parsed);
+            return;
+          }
+        } catch {}
+      }
+    });
+
+    socket.on("error", reject);
+
+    // Fallback timeout
+    setTimeout(() => {
+      finish({ success: false, error: "Timeout waiting for server response" });
+    }, 2000);
+  });
+}
+
 function sendCommand(msg: ClientMessage): Promise<ServerMessage[]> {
   return new Promise(async (resolve, reject) => {
     const running = await isServerRunning();
@@ -184,4 +240,129 @@ export async function killServer(): Promise<void> {
       finish("Server killed (timeout).");
     }, 2000);
   });
+}
+
+// --- Remote CLI commands ---
+
+export async function selectPane(
+  direction: "up" | "down" | "left" | "right",
+  target?: string,
+): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "select-pane",
+      args: { direction },
+      target,
+    });
+    if (!result.success) {
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+export async function displayMessage(
+  format: string,
+  target?: string,
+): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "display-message",
+      args: { format },
+      target,
+    });
+    if (result.success && result.data !== undefined) {
+      console.log(result.data);
+    } else if (!result.success) {
+      console.error(result.error || "Failed");
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+export async function selectWindow(
+  direction: "next" | "previous",
+  target?: string,
+): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "select-window",
+      args: { direction },
+      target,
+    });
+    if (!result.success) {
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+export async function splitWindow(
+  direction: "horizontal" | "vertical",
+  target?: string,
+): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "split-window",
+      args: { direction },
+      target,
+    });
+    if (!result.success) {
+      console.error(result.error || "Failed");
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+export async function newWindow(target?: string): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "new-window",
+      target,
+    });
+    if (!result.success) {
+      console.error(result.error || "Failed");
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
+export async function remoteCommand(
+  id: string,
+  target?: string,
+  commandArgs?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const result = await sendRemoteCommand({
+      type: "remote-command",
+      command: "send-command",
+      args: { id, commandArgs },
+      target,
+    });
+    if (!result.success) {
+      console.error(result.error || "Failed");
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
 }
