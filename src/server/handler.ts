@@ -571,6 +571,25 @@ export class ServerHandler {
     switchTo = true,
     broadcast = true,
   ): void {
+    // CWD VOR dem Window-Wechsel bestimmen (sonst zeigt activeWindow schon auf das neue, leere Window)
+    let cwdOverride: string | undefined;
+    if (this.config.newPaneCwd === "inherit") {
+      const session = this.sessions.getSession(sessionId);
+      if (session) {
+        const activeWin = session.windows.find(
+          (w) => w.id === session.activeWindow,
+        );
+        const activePane = activeWin?.panes.find(
+          (p) => p.id === activeWin.activePane,
+        );
+        if (activePane?.cwd) {
+          cwdOverride = activePane.cwd;
+        }
+      }
+    } else {
+      cwdOverride = this.config.newPaneCwd;
+    }
+
     const window = this.sessions.addWindow(sessionId, name);
     if (!window) return;
 
@@ -580,23 +599,14 @@ export class ServerHandler {
     }
 
     const paneId = getAllPaneIds(window.layout)[0]!;
-
-    // CWD für neues Window bestimmen
-    let cwdOverride: string | undefined;
-    if (this.config.newPaneCwd === "inherit") {
-      const session = this.sessions.getSession(sessionId);
-      if (session) {
-        const activeWin = session.windows.find(w => w.id === session.activeWindow);
-        const activePane = activeWin?.panes.find(p => p.id === activeWin.activePane);
-        if (activePane?.cwd) {
-          cwdOverride = activePane.cwd;
-        }
-      }
-    } else {
-      cwdOverride = this.config.newPaneCwd;
-    }
-
-    this.spawnPaneProcess(sessionId, window.id, paneId, cols, rows - 1, cwdOverride);
+    this.spawnPaneProcess(
+      sessionId,
+      window.id,
+      paneId,
+      cols,
+      rows - 1,
+      cwdOverride,
+    );
 
     this.hooks.emit("window:created", window);
     if (broadcast) this.broadcastState(sessionId, true);
