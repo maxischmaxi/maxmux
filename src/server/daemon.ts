@@ -82,6 +82,12 @@ export function isServerRunning(): Promise<boolean> {
 }
 
 export async function startServer(config: MaxMuxConfig): Promise<void> {
+  const alreadyRunning = await isServerRunning();
+  if (alreadyRunning) {
+    debugLog("server", "another server is already running — exiting");
+    process.exit(0);
+  }
+
   setDebugEnabled(config.debug);
   const { ServerHandler } = await import("./handler.ts");
   const socketPath = getSocketPath();
@@ -99,11 +105,29 @@ export async function startServer(config: MaxMuxConfig): Promise<void> {
 
   await handler.init();
 
-  // Clean up stale socket
+  // Clean up stale socket — only if owning process is dead
   if (existsSync(socketPath)) {
-    try {
-      unlinkSync(socketPath);
-    } catch {}
+    if (existsSync(pidPath)) {
+      try {
+        const pid = parseInt(readFileSync(pidPath, "utf-8").trim(), 10);
+        if (!isNaN(pid)) {
+          process.kill(pid, 0); // throws if dead
+          // Process is alive — should not have reached here (isServerRunning guard above)
+          debugLog("server", `server pid=${pid} is still alive — exiting`);
+          process.exit(0);
+        }
+      } catch {
+        // Process is dead — safe to clean up
+        try {
+          unlinkSync(socketPath);
+        } catch {}
+      }
+    } else {
+      // No PID file but socket exists — stale, clean up
+      try {
+        unlinkSync(socketPath);
+      } catch {}
+    }
   }
 
   const dir = dirname(socketPath);
@@ -170,21 +194,23 @@ export async function startServer(config: MaxMuxConfig): Promise<void> {
     });
   });
 
-  server.on("error", (err) => {
-    debugLog("server", `server socket error: ${(err as Error).message}`);
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    debugLog("server", `server socket error: ${err.message}`);
+    if (err.code === "EADDRINUSE") {
+      debugLog("server", "socket already in use — exiting");
+      process.exit(1);
+    }
   });
 
   server.listen(socketPath, () => {
     // Server ready
   });
 
-  // Periodically check if socket file still exists — recreate if deleted externally
+  // If socket file is deleted, shut down instead of competing with a new server
   const socketWatcher = setInterval(() => {
     if (!existsSync(socketPath)) {
-      debugLog("server", "socket file missing — recreating");
-      server.close(() => {
-        server.listen(socketPath);
-      });
+      debugLog("server", "socket file missing — shutting down");
+      cleanup();
     }
   }, 5000);
   socketWatcher.unref();
