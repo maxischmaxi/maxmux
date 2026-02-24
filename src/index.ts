@@ -1,5 +1,15 @@
 #!/usr/bin/env bun
 
+// Injected at compile time via --define; falls back to package.json in dev mode
+declare const __MAXMUX_VERSION__: string;
+const VERSION: string =
+  typeof __MAXMUX_VERSION__ !== "undefined"
+    ? __MAXMUX_VERSION__
+    : (() => {
+        const f = "../package" + ".json";
+        return require(f).version;
+      })();
+
 const args = process.argv.slice(2);
 const command = args[0];
 
@@ -19,6 +29,11 @@ const fastCommands = [
   "new-window",
   "send-command",
 ];
+
+if (command === "--version" || command === "-v" || command === "version") {
+  console.log(`maxmux v${VERSION}`);
+  process.exit(0);
+}
 
 if (command && fastCommands.includes(command)) {
   // Nuclear safety net — SIGKILL guaranteed to work (process.exit doesn't in Bun)
@@ -130,12 +145,6 @@ async function main() {
     case "--help":
     case "-h":
       printHelp();
-      break;
-
-    case "version":
-    case "--version":
-    case "-v":
-      console.log("maxmux v0.2.0");
       break;
 
     default: {

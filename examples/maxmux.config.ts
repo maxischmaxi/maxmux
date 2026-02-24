@@ -10,6 +10,11 @@ export default defineConfig({
   // Default shell
   shell: process.env.SHELL || "/bin/bash",
 
+  // Working directory for new panes:
+  // "inherit" (default) = use the active pane's cwd
+  // or an absolute path like "/home/user/projects" to always start there
+  // newPaneCwd: "inherit",
+
   // Theme (Catppuccin Mocha inspired)
   theme: {
     statusBar: {

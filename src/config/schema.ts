@@ -153,6 +153,7 @@ export const ConfigSchema = z.object({
   prefixTimeout: z.number().default(0),
   historyLimit: z.number().min(0).max(100_000).default(10_000),
   shell: z.string().default(process.env.SHELL || "/bin/bash"),
+  newPaneCwd: z.string().default("inherit"),
   switchToNewWindow: z.boolean().default(true),
   automaticRename: z.boolean().default(true),
   automaticRenameInterval: z.number().default(2000),
@@ -380,6 +381,11 @@ export interface MaxMuxConfigInput {
    * Verwendet standardmaessig die `$SHELL`-Umgebungsvariable.
    * @default $SHELL oder "/bin/bash" */
   shell?: string;
+  /** Arbeitsverzeichnis fuer neue Panes.
+   * - `"inherit"` — Verzeichnis des aktiven Panes uebernehmen
+   * - Ein absoluter Pfad (z.B. `"/home/user/projects"`) — immer dieses Verzeichnis verwenden
+   * @default "inherit" */
+  newPaneCwd?: string;
   /** Automatisch zum neu erstellten Fenster wechseln.
    * @default true */
   switchToNewWindow?: boolean;

@@ -33,6 +33,7 @@ export const DEFAULT_CONFIG: MaxMuxConfig = {
   prefixTimeout: 0,
   historyLimit: 10_000,
   shell: process.env.SHELL || "/bin/bash",
+  newPaneCwd: "inherit",
   switchToNewWindow: true,
   automaticRename: true,
   automaticRenameInterval: 2000,

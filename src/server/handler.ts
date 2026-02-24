@@ -580,7 +580,23 @@ export class ServerHandler {
     }
 
     const paneId = getAllPaneIds(window.layout)[0]!;
-    this.spawnPaneProcess(sessionId, window.id, paneId, cols, rows - 1);
+
+    // CWD für neues Window bestimmen
+    let cwdOverride: string | undefined;
+    if (this.config.newPaneCwd === "inherit") {
+      const session = this.sessions.getSession(sessionId);
+      if (session) {
+        const activeWin = session.windows.find(w => w.id === session.activeWindow);
+        const activePane = activeWin?.panes.find(p => p.id === activeWin.activePane);
+        if (activePane?.cwd) {
+          cwdOverride = activePane.cwd;
+        }
+      }
+    } else {
+      cwdOverride = this.config.newPaneCwd;
+    }
+
+    this.spawnPaneProcess(sessionId, window.id, paneId, cols, rows - 1, cwdOverride);
 
     this.hooks.emit("window:created", window);
     if (broadcast) this.broadcastState(sessionId, true);
@@ -1180,7 +1196,25 @@ export class ServerHandler {
       ? Math.max(1, newRect.height)
       : Math.max(1, rows - 1);
 
-    this.spawnPaneProcess(sessionId, window.id, newPaneId, newCols, newRows);
+    // CWD für neues Pane bestimmen
+    let cwdOverride: string | undefined;
+    if (this.config.newPaneCwd === "inherit") {
+      const currentPane = window.panes.find((p) => p.id === currentPaneId);
+      if (currentPane?.cwd) {
+        cwdOverride = currentPane.cwd;
+      }
+    } else {
+      cwdOverride = this.config.newPaneCwd;
+    }
+
+    this.spawnPaneProcess(
+      sessionId,
+      window.id,
+      newPaneId,
+      newCols,
+      newRows,
+      cwdOverride,
+    );
 
     window.activePane = newPaneId;
 

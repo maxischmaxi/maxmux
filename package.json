@@ -1,6 +1,6 @@
 {
   "name": "@maxischmaxi/maxmux",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Modern terminal session manager — a tmux alternative built with TypeScript",
   "type": "module",
   "bin": {
@@ -17,7 +17,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "build": "bun build src/index.ts --compile --outfile maxmux",
+    "build": "bun build.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

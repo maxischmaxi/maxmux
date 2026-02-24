@@ -266,6 +266,11 @@ export default defineConfig({
   // Default shell
   shell: "/bin/zsh",
 
+  // Working directory for new panes (default: "inherit")
+  // "inherit" = new panes start in the active pane's directory
+  // or set an absolute path to always start there
+  newPaneCwd: "inherit",
+
   // Scrollback buffer lines per pane (default: 10000, max: 100000)
   historyLimit: 10_000,
 

@@ -81,6 +81,20 @@ local function setup_keymaps()
 			navigate(dir)
 		end, vim.tbl_extend("force", opts, { desc = desc }))
 	end
+
+	vim.api.nvim_create_autocmd("FileType", {
+		pattern = "oil",
+		callback = function()
+			for dir, info in pairs(direction_map) do
+				local key = "<C-" .. dir .. ">"
+				local desc = "Navigate " .. info.desc .. " (Neovim/MaxMux)"
+
+				vim.keymap.set({ "n", "t" }, key, function()
+					navigate(dir)
+				end, { desc = desc, buffer = true })
+			end
+		end,
+	})
 end
 
 local function setup_commands()
