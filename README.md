@@ -26,6 +26,23 @@
 
 ---
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Keybindings](#keybindings)
+- [Copy Mode](#copy-mode)
+- [CLI Commands](#cli-commands)
+- [Configuration](#configuration)
+- [Custom Keybindings](#custom-keybindings)
+- [Plugins](#plugins)
+- [Architecture](#architecture)
+- [Shell Autostart](#shell-autostart)
+- [Requirements](#requirements)
+- [License](#license)
+
+---
+
 ## Installation
 
 ### One-liner (recommended)
