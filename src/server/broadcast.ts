@@ -27,7 +27,26 @@ export type ServerMessage =
       type: "preview-layout";
       layout: any;
       paneRects: Record<string, any>;
-    };
+    }
+  | {
+      type: "notes:data";
+      notes: Array<{
+        id: string;
+        content: string;
+        created_at: number;
+        updated_at: number;
+      }>;
+    }
+  | {
+      type: "notes:saved";
+      note: {
+        id: string;
+        content: string;
+        created_at: number;
+        updated_at: number;
+      };
+    }
+  | { type: "notes:deleted"; noteId: string };
 
 export class Broadcaster {
   private clients: Map<string, Socket> = new Map();

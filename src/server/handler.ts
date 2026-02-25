@@ -26,6 +26,7 @@ import { loadPlugins } from "../plugins/loader.ts";
 import { Broadcaster, type ServerMessage } from "./broadcast.ts";
 import type { MaxMuxConfig } from "../config/schema.ts";
 import { AutoSaver } from "../persistence/autosave.ts";
+import { NotesDB } from "../persistence/notes-db.ts";
 import {
   saveSession,
   loadSavedSessions,
@@ -52,7 +53,10 @@ export type ClientMessage =
       command: string;
       args?: Record<string, unknown>;
       target?: string;
-    };
+    }
+  | { type: "notes:list" }
+  | { type: "notes:save"; noteId?: string; content: string }
+  | { type: "notes:delete"; noteId: string };
 
 export class ServerHandler {
   readonly sessions: SessionManager;
@@ -75,6 +79,7 @@ export class ServerHandler {
   private processTracker: ProcessTracker;
   private configWatcher: ConfigWatcher | null = null;
   private configPath: string | null;
+  private notesDb: NotesDB;
 
   constructor(config: MaxMuxConfig, configPath?: string | null) {
     this.config = config;
@@ -86,6 +91,7 @@ export class ServerHandler {
     this.keybindings = new KeybindingRegistry();
     this.hooks = new HookRegistry();
     this.broadcaster = new Broadcaster();
+    this.notesDb = new NotesDB(join(homedir(), ".maxmux", "notes.db"));
 
     this.metricsCollector = new MetricsCollector();
     this.processTracker = new ProcessTracker();
@@ -303,6 +309,15 @@ export class ServerHandler {
       case "remote-command":
         this.handleRemoteCommand(clientId, msg.command, msg.args, msg.target);
         break;
+      case "notes:list":
+        this.handleNotesList(clientId);
+        break;
+      case "notes:save":
+        this.handleNotesSave(clientId, msg.noteId, msg.content);
+        break;
+      case "notes:delete":
+        this.handleNotesDelete(clientId, msg.noteId);
+        break;
     }
   }
 
@@ -460,6 +475,36 @@ export class ServerHandler {
         message: `Command failed: ${err}`,
       });
     }
+  }
+
+  private handleNotesList(clientId: string): void {
+    const notes = this.notesDb.listAll();
+    this.broadcaster.send(clientId, { type: "notes:data", notes });
+  }
+
+  private handleNotesSave(
+    clientId: string,
+    noteId: string | undefined,
+    content: string,
+  ): void {
+    if (noteId) {
+      this.notesDb.update(noteId, content);
+      const note = this.notesDb.getById(noteId);
+      if (note) {
+        this.broadcaster.send(clientId, { type: "notes:saved", note });
+      }
+    } else {
+      const id = this.notesDb.create(content);
+      const note = this.notesDb.getById(id);
+      if (note) {
+        this.broadcaster.send(clientId, { type: "notes:saved", note });
+      }
+    }
+  }
+
+  private handleNotesDelete(clientId: string, noteId: string): void {
+    this.notesDb.deleteById(noteId);
+    this.broadcaster.send(clientId, { type: "notes:deleted", noteId });
   }
 
   private handleSessionCreate(
@@ -1139,6 +1184,22 @@ export class ServerHandler {
             this.saveImmediate();
           }
         }
+      },
+    });
+
+    this.commands.register({
+      id: "notes:create",
+      description: "Create a new note",
+      execute: () => {
+        // Handled client-side (opens overlay)
+      },
+    });
+
+    this.commands.register({
+      id: "notes:list",
+      description: "Show notes list",
+      execute: () => {
+        // Handled client-side (opens overlay)
       },
     });
   }
@@ -1913,6 +1974,7 @@ export class ServerHandler {
     if (this.autoSaver) {
       this.autoSaver.stop();
     }
+    this.notesDb.close();
 
     // Always save state before killing PTYs, even if autoSave is disabled
     try {
