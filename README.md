@@ -22,6 +22,7 @@
 - **Persistent windows** — switch between windows without losing terminal content
 - **Flexible keybindings** — prefix-based, global, or both — bind any key to any command
 - **Copy mode** — vi-style text selection and clipboard copy
+- **Built-in notes** — create, search and manage notes without leaving the terminal
 - **Modern stack** — built on Bun, node-pty, and xterm-headless
 
 ---
@@ -31,6 +32,7 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Keybindings](#keybindings)
+- [Notes](#notes-1)
 - [Copy Mode](#copy-mode)
 - [CLI Commands](#cli-commands)
 - [Configuration](#configuration)
@@ -174,6 +176,25 @@ Windows preserve their terminal content — programs like vim keep running in th
 | `prefix` + `N` | Create new session   |
 | `prefix` + `$` | Rename session       |
 
+### Notes
+
+| Keys           | Action          |
+| -------------- | --------------- |
+| `prefix` + `m` | Create new note |
+| `prefix` + `M` | List all notes  |
+
+In the **notes list**, you can type to search/filter notes by title or content. Additional keys:
+
+| Key         | Action                  |
+| ----------- | ----------------------- |
+| `Up` / `Down` | Navigate notes        |
+| `Enter`     | Open note in editor     |
+| `d`         | Delete selected note    |
+| `Backspace` | Delete search character |
+| `Escape`    | Close notes list        |
+
+In the **note editor**, standard text editing keys apply. Press `Escape` to save and close.
+
 ### Copy Mode & Other
 
 | Keys           | Action               |
@@ -217,6 +238,25 @@ Press `prefix` + `[` to enter copy mode. This freezes the pane content and lets 
 | `q`      | Exit copy mode                     |
 
 You can also select text by dragging with the mouse — the selection is automatically copied to the clipboard on release.
+
+---
+
+## Notes
+
+MaxMux has a built-in notes system — create and manage quick notes without leaving the terminal. Notes are stored in a local SQLite database (`~/.maxmux/notes.db`) and persist across sessions.
+
+- **`prefix` + `m`** — Create a new note (opens the note editor)
+- **`prefix` + `M`** — Open the notes list
+
+The notes list supports **live search**: just start typing to filter notes by title or content. Use arrow keys to navigate, `Enter` to open, `d` to delete, and `Escape` to close.
+
+To display the total notes count in your status bar, add `"notes"` to your status bar config:
+
+```typescript
+statusBar: {
+  right: ["notes", "git", "cwd", "datetime"],
+}
+```
 
 ---
 
@@ -384,6 +424,7 @@ These modules can be placed in `statusBar.left` or `statusBar.right`:
 | `network`   | Network status                   |
 | `prefix`    | Prefix key indicator             |
 | `pane-info` | Active pane info                 |
+| `notes`     | Total notes count                |
 
 ---
 
@@ -457,6 +498,8 @@ globalKeybindings: {
 | `command-palette`       | Open command palette      |
 | `keybindings:show`      | Show all keybindings      |
 | `copy-mode:enter`       | Enter copy mode           |
+| `notes:create`          | Create a new note         |
+| `notes:list`            | Show notes list           |
 
 ### Priority
 
