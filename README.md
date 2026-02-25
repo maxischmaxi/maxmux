@@ -515,6 +515,73 @@ Server (~/.maxmux/server.sock)          Clients
 
 ---
 
+## Shell Autostart
+
+MaxMux can automatically start when you open a new terminal — just like the common tmux pattern `[[ -z "$TMUX" ]] && exec tmux`.
+
+### Setup
+
+Download the autostart script and source it from your `.zshrc` or `.bashrc`:
+
+```bash
+# Download the script (one-time)
+mkdir -p ~/.config/maxmux
+curl -fsSL https://raw.githubusercontent.com/maxischmaxi/maxmux/main/extras/shell/maxmux-autostart.sh \
+  -o ~/.config/maxmux/maxmux-autostart.sh
+```
+
+Then add this to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+[ -f ~/.config/maxmux/maxmux-autostart.sh ] && \
+  . ~/.config/maxmux/maxmux-autostart.sh
+```
+
+> If you installed from source or via npm, you can also source the script directly:
+> `. /path/to/maxmux/extras/shell/maxmux-autostart.sh`
+
+### How it works
+
+When sourced, the script checks a series of guards (already inside maxmux? non-interactive shell? no TTY? another multiplexer running? VS Code terminal?) and only launches maxmux if all checks pass.
+
+By default the shell is **replaced** with `exec maxmux`, so the terminal closes when you detach. Set `MAXMUX_AUTOSTART_EXEC=0` to keep the shell alive after detach instead.
+
+### Configuration
+
+Set these variables **before** sourcing the script:
+
+| Variable | Default | Description |
+|---|---|---|
+| `MAXMUX_AUTOSTART` | *(active)* | `0` to disable autostart entirely |
+| `MAXMUX_AUTOSTART_EXEC` | `1` | `1` = `exec` (shell replaced, terminal closes on detach). `0` = shell survives after detach |
+| `MAXMUX_AUTOSTART_SESSION` | *(empty)* | Named session to attach/create. Empty = default behavior |
+| `MAXMUX_AUTOSTART_BINARY` | `maxmux` | Path to the maxmux binary |
+| `MAXMUX_AUTOSTART_SKIP_SSH` | `0` | `1` = skip autostart in SSH sessions |
+| `MAXMUX_AUTOSTART_SKIP_VSCODE` | `1` | `0` = also autostart in VS Code terminal |
+| `MAXMUX_AUTOSTART_SKIP_IDE` | `1` | `0` = also autostart in JetBrains IDE terminals |
+
+### Examples
+
+```bash
+# Always attach to a session named "main"
+MAXMUX_AUTOSTART_SESSION="main"
+. ~/.config/maxmux/maxmux-autostart.sh
+
+# Keep the shell alive after detach
+MAXMUX_AUTOSTART_EXEC=0
+. ~/.config/maxmux/maxmux-autostart.sh
+
+# Skip autostart in SSH and use a custom binary path
+MAXMUX_AUTOSTART_SKIP_SSH=1
+MAXMUX_AUTOSTART_BINARY="$HOME/.local/bin/maxmux"
+. ~/.config/maxmux/maxmux-autostart.sh
+
+# Disable autostart for a single shell invocation
+MAXMUX_AUTOSTART=0 zsh
+```
+
+---
+
 ## Requirements
 
 - **Linux** or **macOS** (Windows not yet supported)
