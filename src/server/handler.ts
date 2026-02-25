@@ -164,6 +164,7 @@ export class ServerHandler {
       5000,
       Math.max(metricsInterval, 30000),
       (metrics) => {
+        metrics.notesCount = this.notesDb.count();
         this.broadcaster.broadcast({ type: "metrics", data: metrics });
       },
     );
@@ -251,6 +252,7 @@ export class ServerHandler {
         5000,
         Math.max(newConfig.statusBar.metricsInterval, 30000),
         (metrics) => {
+          metrics.notesCount = this.notesDb.count();
           this.broadcaster.broadcast({ type: "metrics", data: metrics });
         },
       );

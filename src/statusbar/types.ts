@@ -49,6 +49,7 @@ export interface SystemMetrics {
   cwd: string;
   paneTitle: string;
   paneCount: number;
+  notesCount: number;
 }
 
 export interface ResolvedStatusBarTheme {
@@ -82,4 +83,5 @@ export const EMPTY_METRICS: SystemMetrics = {
   cwd: "",
   paneTitle: "",
   paneCount: 0,
+  notesCount: 0,
 };

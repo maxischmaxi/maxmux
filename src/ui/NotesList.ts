@@ -10,17 +10,37 @@ export interface NotesListEntry {
 }
 
 export interface NotesListState {
+  query: string;
   selectedIndex: number;
-  notes: NotesListEntry[];
+  allNotes: NotesListEntry[];
+  filtered: NotesListEntry[];
   confirmDelete: boolean; // true when awaiting delete confirmation
 }
 
 export function createNotesListState(notes: NotesListEntry[]): NotesListState {
   return {
+    query: "",
     selectedIndex: 0,
-    notes,
+    allNotes: notes,
+    filtered: [...notes],
     confirmDelete: false,
   };
+}
+
+export function updateNotesFilter(state: NotesListState): void {
+  const q = state.query.toLowerCase();
+  state.filtered = state.allNotes.filter((n) => {
+    if (q === "") return true;
+    return (
+      deriveTitle(n.content).toLowerCase().includes(q) ||
+      n.content.toLowerCase().includes(q)
+    );
+  });
+  if (state.filtered.length === 0) {
+    state.selectedIndex = 0;
+  } else if (state.selectedIndex >= state.filtered.length) {
+    state.selectedIndex = state.filtered.length - 1;
+  }
 }
 
 function formatDate(timestamp: number): string {
@@ -34,9 +54,9 @@ export function renderNotesList(
   cols: number,
   rows: number,
 ): string {
-  const maxItems = Math.min(state.notes.length, rows - 8);
+  const maxItems = Math.min(state.filtered.length, rows - 10);
   const width = Math.min(60, cols - 4);
-  const height = Math.max(6, maxItems + 4);
+  const height = Math.max(8, maxItems + 6);
   const x = Math.floor((cols - width) / 2);
   const y = Math.floor((rows - height) / 2);
 
@@ -51,10 +71,19 @@ export function renderNotesList(
     fg: "#cdd6f4",
   });
 
-  if (state.notes.length === 0) {
-    out += renderText(x + 2, y + 1, "No notes yet", "#585b70", "#1e1e2e");
+  // Query input line
+  const queryDisplay = `> ${state.query}_`;
+  out += renderText(x + 2, y + 1, queryDisplay, "#cdd6f4", "#1e1e2e");
+
+  // Separator
+  const sep = "\u2500".repeat(width - 4);
+  out += renderText(x + 2, y + 2, sep, "#585b70", "#1e1e2e");
+
+  if (state.filtered.length === 0) {
+    const msg = state.allNotes.length === 0 ? "No notes yet" : "No matches";
+    out += renderText(x + 2, y + 3, msg, "#585b70", "#1e1e2e");
   } else {
-    const items = state.notes.slice(0, maxItems).map((n) => {
+    const items = state.filtered.slice(0, maxItems).map((n) => {
       const title = deriveTitle(n.content);
       const date = formatDate(n.updated_at);
       const maxTitleLen = width - date.length - 8;
@@ -67,7 +96,7 @@ export function renderNotesList(
 
     out += renderList(
       x + 2,
-      y + 1,
+      y + 3,
       items,
       state.selectedIndex,
       "#a6adc8",
@@ -78,7 +107,7 @@ export function renderNotesList(
   }
 
   // Hint / confirmation
-  if (state.confirmDelete && state.notes.length > 0) {
+  if (state.confirmDelete && state.filtered.length > 0) {
     const hint = "Delete this note? y: yes  n: cancel";
     out += renderText(
       x + Math.floor((width - hint.length) / 2),
@@ -87,7 +116,7 @@ export function renderNotesList(
       "#f38ba8",
     );
   } else {
-    const hint = "Enter: open  d: delete  Esc: close";
+    const hint = "Enter: open  d: delete  /: search  Esc: close";
     out += renderText(
       x + Math.floor((width - hint.length) / 2),
       y + height - 1,

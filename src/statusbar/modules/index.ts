@@ -12,6 +12,7 @@ import { batteryModule } from "./battery.ts";
 import { networkModule } from "./network.ts";
 import { prefixModule } from "./prefix.ts";
 import { paneInfoModule } from "./pane-info.ts";
+import { notesModule } from "./notes.ts";
 
 const ALL_MODULES: StatusBarModule[] = [
   sessionModule,
@@ -27,6 +28,7 @@ const ALL_MODULES: StatusBarModule[] = [
   networkModule,
   prefixModule,
   paneInfoModule,
+  notesModule,
 ];
 
 export function buildModuleRegistry(): Map<string, StatusBarModule> {

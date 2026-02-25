@@ -32,6 +32,7 @@ import {
   type NotesListState,
   type NotesListEntry,
   createNotesListState,
+  updateNotesFilter,
   renderNotesList,
 } from "../ui/NotesList.ts";
 import {
@@ -1707,6 +1708,253 @@ export async function attachToSession(
         return;
       }
 
+      // Ctrl+A — move to beginning of line
+      if (bytes.length === 1 && bytes[0] === 0x01) {
+        editorState.cursorCol = 0;
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+E — move to end of line
+      if (bytes.length === 1 && bytes[0] === 0x05) {
+        editorState.cursorCol = (
+          editorState.lines[editorState.cursorRow] ?? ""
+        ).length;
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+B — move back one character
+      if (bytes.length === 1 && bytes[0] === 0x02) {
+        if (editorState.cursorCol > 0) {
+          editorState.cursorCol--;
+        } else if (editorState.cursorRow > 0) {
+          editorState.cursorRow--;
+          editorState.cursorCol = (
+            editorState.lines[editorState.cursorRow] ?? ""
+          ).length;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+F — move forward one character
+      if (bytes.length === 1 && bytes[0] === 0x06) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          editorState.cursorCol++;
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          editorState.cursorRow++;
+          editorState.cursorCol = 0;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+D — delete character under cursor (forward delete)
+      if (bytes.length === 1 && bytes[0] === 0x04) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, editorState.cursorCol) +
+            line.slice(editorState.cursorCol + 1);
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          const nextLine = editorState.lines[editorState.cursorRow + 1] ?? "";
+          editorState.lines[editorState.cursorRow] = line + nextLine;
+          editorState.lines.splice(editorState.cursorRow + 1, 1);
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+K — kill from cursor to end of line
+      if (bytes.length === 1 && bytes[0] === 0x0b) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          editorState.lines[editorState.cursorRow] = line.slice(
+            0,
+            editorState.cursorCol,
+          );
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          const nextLine = editorState.lines[editorState.cursorRow + 1] ?? "";
+          editorState.lines[editorState.cursorRow] = line + nextLine;
+          editorState.lines.splice(editorState.cursorRow + 1, 1);
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+U — delete from cursor to beginning of line
+      if (bytes.length === 1 && bytes[0] === 0x15) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        editorState.lines[editorState.cursorRow] = line.slice(
+          editorState.cursorCol,
+        );
+        editorState.cursorCol = 0;
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+W — delete word before cursor
+      if (bytes.length === 1 && bytes[0] === 0x17) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol > 0) {
+          const before = line.slice(0, editorState.cursorCol);
+          const after = line.slice(editorState.cursorCol);
+          const trimmed = before.replace(/\s+$/, "");
+          const wordStart = trimmed.search(/\S+$/);
+          const newCol = wordStart === -1 ? 0 : wordStart;
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, newCol) + after;
+          editorState.cursorCol = newCol;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+H — delete character before cursor (same as backspace)
+      if (bytes.length === 1 && bytes[0] === 0x08) {
+        if (editorState.cursorCol > 0) {
+          const line = editorState.lines[editorState.cursorRow] ?? "";
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, editorState.cursorCol - 1) +
+            line.slice(editorState.cursorCol);
+          editorState.cursorCol--;
+        } else if (editorState.cursorRow > 0) {
+          const prevLine = editorState.lines[editorState.cursorRow - 1] ?? "";
+          const curLine = editorState.lines[editorState.cursorRow] ?? "";
+          editorState.cursorCol = prevLine.length;
+          editorState.lines[editorState.cursorRow - 1] = prevLine + curLine;
+          editorState.lines.splice(editorState.cursorRow, 1);
+          editorState.cursorRow--;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+T — transpose characters
+      if (bytes.length === 1 && bytes[0] === 0x14) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol > 0 && editorState.cursorCol <= line.length) {
+          const pos =
+            editorState.cursorCol < line.length
+              ? editorState.cursorCol
+              : editorState.cursorCol - 1;
+          if (pos > 0) {
+            const chars = line.split("");
+            const tmp = chars[pos - 1]!;
+            chars[pos - 1] = chars[pos]!;
+            chars[pos] = tmp;
+            editorState.lines[editorState.cursorRow] = chars.join("");
+            editorState.cursorCol = Math.min(pos + 1, line.length);
+          }
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+L — redraw editor
+      if (bytes.length === 1 && bytes[0] === 0x0c) {
+        process.stdout.write(ansi.clearScreen());
+        redrawEditor();
+        return;
+      }
+
+      // Alt+B — move back one word
+      if (bytes.length === 2 && bytes[0] === 0x1b && bytes[1] === 0x62) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol > 0) {
+          let pos = editorState.cursorCol - 1;
+          while (pos > 0 && /\s/.test(line[pos] ?? "")) pos--;
+          while (pos > 0 && /\S/.test(line[pos - 1] ?? "")) pos--;
+          editorState.cursorCol = pos;
+        } else if (editorState.cursorRow > 0) {
+          editorState.cursorRow--;
+          editorState.cursorCol = (
+            editorState.lines[editorState.cursorRow] ?? ""
+          ).length;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Alt+F — move forward one word
+      if (bytes.length === 2 && bytes[0] === 0x1b && bytes[1] === 0x66) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          let pos = editorState.cursorCol;
+          while (pos < line.length && /\S/.test(line[pos] ?? "")) pos++;
+          while (pos < line.length && /\s/.test(line[pos] ?? "")) pos++;
+          editorState.cursorCol = pos;
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          editorState.cursorRow++;
+          editorState.cursorCol = 0;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Alt+D — delete word after cursor
+      if (bytes.length === 2 && bytes[0] === 0x1b && bytes[1] === 0x64) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          let pos = editorState.cursorCol;
+          while (pos < line.length && /\s/.test(line[pos] ?? "")) pos++;
+          while (pos < line.length && /\S/.test(line[pos] ?? "")) pos++;
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, editorState.cursorCol) + line.slice(pos);
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          const nextLine = editorState.lines[editorState.cursorRow + 1] ?? "";
+          editorState.lines[editorState.cursorRow] = line + nextLine;
+          editorState.lines.splice(editorState.cursorRow + 1, 1);
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Alt+Backspace — delete word before cursor
+      if (bytes.length === 2 && bytes[0] === 0x1b && bytes[1] === 0x7f) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol > 0) {
+          const before = line.slice(0, editorState.cursorCol);
+          const after = line.slice(editorState.cursorCol);
+          const trimmed = before.replace(/\s+$/, "");
+          const wordStart = trimmed.search(/\S+$/);
+          const newCol = wordStart === -1 ? 0 : wordStart;
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, newCol) + after;
+          editorState.cursorCol = newCol;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+P — move up one line (same as Arrow Up)
+      if (bytes.length === 1 && bytes[0] === 0x10) {
+        if (editorState.cursorRow > 0) {
+          editorState.cursorRow--;
+          editorState.cursorCol = Math.min(
+            editorState.cursorCol,
+            (editorState.lines[editorState.cursorRow] ?? "").length,
+          );
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Ctrl+N — move down one line (same as Arrow Down)
+      if (bytes.length === 1 && bytes[0] === 0x0e) {
+        if (editorState.cursorRow < editorState.lines.length - 1) {
+          editorState.cursorRow++;
+          editorState.cursorCol = Math.min(
+            editorState.cursorCol,
+            (editorState.lines[editorState.cursorRow] ?? "").length,
+          );
+        }
+        redrawEditor();
+        return;
+      }
+
       // Printable characters
       const str = data.toString("utf-8");
       const firstByte = bytes[0];
@@ -1760,12 +2008,15 @@ export async function attachToSession(
       if (listState.confirmDelete) {
         if (bytes.length === 1 && bytes[0] === 0x79) {
           // 'y'
-          const note = listState.notes[listState.selectedIndex];
+          const note = listState.filtered[listState.selectedIndex];
           if (note) {
             connection.send({ type: "notes:delete", noteId: note.id } as any);
-            listState.notes.splice(listState.selectedIndex, 1);
+            // Remove from both allNotes and filtered
+            const allIdx = listState.allNotes.indexOf(note);
+            if (allIdx !== -1) listState.allNotes.splice(allIdx, 1);
+            listState.filtered.splice(listState.selectedIndex, 1);
             if (
-              listState.selectedIndex >= listState.notes.length &&
+              listState.selectedIndex >= listState.filtered.length &&
               listState.selectedIndex > 0
             ) {
               listState.selectedIndex--;
@@ -1782,7 +2033,7 @@ export async function attachToSession(
 
       // Enter — open note in editor
       if (bytes.length === 1 && bytes[0] === 0x0d) {
-        const note = listState.notes[listState.selectedIndex];
+        const note = listState.filtered[listState.selectedIndex];
         if (note) {
           closeList();
           showNoteEditor(note.id, note.content);
@@ -1790,22 +2041,12 @@ export async function attachToSession(
         return;
       }
 
-      // 'd' — delete
-      if (bytes.length === 1 && bytes[0] === 0x64) {
-        if (listState.notes.length > 0) {
-          listState.confirmDelete = true;
-          redrawList();
-        }
-        return;
-      }
-
-      // Arrow Up or 'k'
+      // Arrow Up
       if (
-        (bytes.length === 3 &&
-          bytes[0] === 0x1b &&
-          bytes[1] === 0x5b &&
-          bytes[2] === 0x41) ||
-        (bytes.length === 1 && bytes[0] === 0x6b)
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x41
       ) {
         if (listState.selectedIndex > 0) {
           listState.selectedIndex--;
@@ -1814,18 +2055,35 @@ export async function attachToSession(
         return;
       }
 
-      // Arrow Down or 'j'
+      // Arrow Down
       if (
-        (bytes.length === 3 &&
-          bytes[0] === 0x1b &&
-          bytes[1] === 0x5b &&
-          bytes[2] === 0x42) ||
-        (bytes.length === 1 && bytes[0] === 0x6a)
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x42
       ) {
-        if (listState.selectedIndex < listState.notes.length - 1) {
+        if (listState.selectedIndex < listState.filtered.length - 1) {
           listState.selectedIndex++;
           redrawList();
         }
+        return;
+      }
+
+      // Backspace — delete last query character
+      if (bytes.length === 1 && bytes[0] === 0x7f) {
+        if (listState.query.length > 0) {
+          listState.query = listState.query.slice(0, -1);
+          updateNotesFilter(listState);
+          redrawList();
+        }
+        return;
+      }
+
+      // Printable ASCII characters — append to query
+      if (bytes.length === 1 && bytes[0] >= 0x20 && bytes[0] < 0x7f) {
+        listState.query += String.fromCharCode(bytes[0]);
+        updateNotesFilter(listState);
+        redrawList();
         return;
       }
     };

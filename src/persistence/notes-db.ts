@@ -73,6 +73,13 @@ export class NotesDB {
       .all() as Note[];
   }
 
+  count(): number {
+    const row = this.db.query("SELECT COUNT(*) as cnt FROM notes").get() as {
+      cnt: number;
+    };
+    return row.cnt;
+  }
+
   close(): void {
     this.db.close();
   }

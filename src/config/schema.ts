@@ -55,6 +55,7 @@ export const STATUSBAR_MODULE_IDS = [
   "network",
   "prefix",
   "pane-info",
+  "notes",
 ] as const;
 
 export const StatusBarModuleIdSchema = z.enum(STATUSBAR_MODULE_IDS);

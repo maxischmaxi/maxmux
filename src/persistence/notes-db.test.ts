@@ -48,6 +48,16 @@ describe("NotesDB", () => {
     expect(note).toBeUndefined();
   });
 
+  test("count returns number of notes", () => {
+    expect(db.count()).toBe(0);
+    db.create("one");
+    db.create("two");
+    expect(db.count()).toBe(2);
+    const id = db.create("three");
+    db.deleteById(id);
+    expect(db.count()).toBe(2);
+  });
+
   test("listAll returns notes sorted by updated_at desc", () => {
     const id1 = db.create("first");
     const id2 = db.create("second");
