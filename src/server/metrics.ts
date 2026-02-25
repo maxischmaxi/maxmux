@@ -29,6 +29,7 @@ export class MetricsCollector {
       cwd: "",
       paneTitle: "",
       paneCount: 0,
+      notesCount: 0,
     };
   }
 

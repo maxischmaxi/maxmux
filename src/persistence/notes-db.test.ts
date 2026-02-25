@@ -65,8 +65,8 @@ describe("NotesDB", () => {
     db.update(id1, "first updated");
     const notes = db.listAll();
     expect(notes.length).toBe(2);
-    expect(notes[0].id).toBe(id1); // most recently updated
-    expect(notes[1].id).toBe(id2);
+    expect(notes[0]!.id).toBe(id1); // most recently updated
+    expect(notes[1]!.id).toBe(id2);
   });
 });
 

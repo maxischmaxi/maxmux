@@ -12,7 +12,7 @@ export function deriveTitle(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) return "Untitled";
 
-  const firstLine = trimmed.split("\n")[0];
+  const firstLine = trimmed.split("\n")[0]!;
   if (firstLine.startsWith("# ")) {
     const heading = firstLine.slice(2).trim();
     return heading || "Untitled";

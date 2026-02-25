@@ -2080,8 +2080,8 @@ export async function attachToSession(
       }
 
       // Printable ASCII characters — append to query
-      if (bytes.length === 1 && bytes[0] >= 0x20 && bytes[0] < 0x7f) {
-        listState.query += String.fromCharCode(bytes[0]);
+      if (bytes.length === 1 && bytes[0]! >= 0x20 && bytes[0]! < 0x7f) {
+        listState.query += String.fromCharCode(bytes[0]!);
         updateNotesFilter(listState);
         redrawList();
         return;
