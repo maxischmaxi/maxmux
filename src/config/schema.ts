@@ -25,6 +25,8 @@ export const COMMAND_IDS = [
   "command-palette",
   "keybindings:show",
   "copy-mode:enter",
+  "notes:create",
+  "notes:list",
 ] as const;
 
 export const CommandIdSchema = z.enum(COMMAND_IDS);

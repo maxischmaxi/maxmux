@@ -24,6 +24,8 @@ export const DEFAULT_KEYBINDINGS: Record<string, KeybindingValue> = {
   ":": "command-palette",
   "?": "keybindings:show",
   "[": "copy-mode:enter",
+  m: "notes:create",
+  M: "notes:list",
 };
 
 export const DEFAULT_GLOBAL_KEYBINDINGS: Record<string, KeybindingValue> = {};
