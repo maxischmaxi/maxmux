@@ -23,6 +23,18 @@ import {
 } from "../ui/RenameDialog.ts";
 import type { RenameDialogState } from "../ui/RenameDialog.ts";
 import {
+  type NoteEditorState,
+  createNoteEditorState,
+  renderNoteEditor,
+  getNoteContent,
+} from "../ui/NoteEditor.ts";
+import {
+  type NotesListState,
+  type NotesListEntry,
+  createNotesListState,
+  renderNotesList,
+} from "../ui/NotesList.ts";
+import {
   createSessionSidebarState,
   updateSidebarSessions,
   renderSessionSidebar,
@@ -803,6 +815,10 @@ export async function attachToSession(
           drawStatusBar();
           break;
 
+        case "notes:data":
+          showNotesList((msg as any).notes);
+          break;
+
         case "error":
           if (msg.message === "detached") {
             cleanup();
@@ -986,6 +1002,14 @@ export async function attachToSession(
 
       case "copy-mode:enter":
         enterCopyMode();
+        return;
+
+      case "notes:create":
+        showNoteEditor(null, "");
+        return;
+
+      case "notes:list":
+        connection.send({ type: "notes:list" } as any);
         return;
     }
 
@@ -1523,6 +1547,291 @@ export async function attachToSession(
 
     process.stdin.on("data", onNewSessionData);
     redrawDialog();
+  };
+
+  const showNoteEditor = (noteId: string | null, content: string) => {
+    showingOverlay = true;
+    const editorState = createNoteEditorState(noteId, content);
+
+    const redrawEditor = () => {
+      process.stdout.write(
+        ansi.hideCursor() + renderNoteEditor(editorState, cols, rows),
+      );
+    };
+
+    const closeEditor = (save: boolean) => {
+      process.stdin.removeListener("data", onEditorData);
+      if (save) {
+        const noteContent = getNoteContent(editorState);
+        connection.send({
+          type: "notes:save",
+          noteId: editorState.noteId ?? undefined,
+          content: noteContent,
+        } as any);
+      }
+      showingOverlay = false;
+      process.stdout.write(ansi.clearScreen());
+      renderScreen();
+    };
+
+    const onEditorData = (data: Buffer) => {
+      const bytes = Array.from(data);
+
+      // Escape — save & close
+      if (bytes.length === 1 && bytes[0] === 0x1b) {
+        closeEditor(true);
+        return;
+      }
+
+      // Ctrl+S — save & close
+      if (bytes.length === 1 && bytes[0] === 0x13) {
+        closeEditor(true);
+        return;
+      }
+
+      // Enter — new line
+      if (bytes.length === 1 && bytes[0] === 0x0d) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        const before = line.slice(0, editorState.cursorCol);
+        const after = line.slice(editorState.cursorCol);
+        editorState.lines[editorState.cursorRow] = before;
+        editorState.lines.splice(editorState.cursorRow + 1, 0, after);
+        editorState.cursorRow++;
+        editorState.cursorCol = 0;
+        redrawEditor();
+        return;
+      }
+
+      // Backspace
+      if (bytes.length === 1 && bytes[0] === 0x7f) {
+        if (editorState.cursorCol > 0) {
+          const line = editorState.lines[editorState.cursorRow] ?? "";
+          editorState.lines[editorState.cursorRow] =
+            line.slice(0, editorState.cursorCol - 1) +
+            line.slice(editorState.cursorCol);
+          editorState.cursorCol--;
+        } else if (editorState.cursorRow > 0) {
+          const prevLine = editorState.lines[editorState.cursorRow - 1] ?? "";
+          const curLine = editorState.lines[editorState.cursorRow] ?? "";
+          editorState.cursorCol = prevLine.length;
+          editorState.lines[editorState.cursorRow - 1] = prevLine + curLine;
+          editorState.lines.splice(editorState.cursorRow, 1);
+          editorState.cursorRow--;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Arrow Up
+      if (
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x41
+      ) {
+        if (editorState.cursorRow > 0) {
+          editorState.cursorRow--;
+          editorState.cursorCol = Math.min(
+            editorState.cursorCol,
+            (editorState.lines[editorState.cursorRow] ?? "").length,
+          );
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Arrow Down
+      if (
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x42
+      ) {
+        if (editorState.cursorRow < editorState.lines.length - 1) {
+          editorState.cursorRow++;
+          editorState.cursorCol = Math.min(
+            editorState.cursorCol,
+            (editorState.lines[editorState.cursorRow] ?? "").length,
+          );
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Arrow Right
+      if (
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x43
+      ) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        if (editorState.cursorCol < line.length) {
+          editorState.cursorCol++;
+        } else if (editorState.cursorRow < editorState.lines.length - 1) {
+          editorState.cursorRow++;
+          editorState.cursorCol = 0;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Arrow Left
+      if (
+        bytes.length === 3 &&
+        bytes[0] === 0x1b &&
+        bytes[1] === 0x5b &&
+        bytes[2] === 0x44
+      ) {
+        if (editorState.cursorCol > 0) {
+          editorState.cursorCol--;
+        } else if (editorState.cursorRow > 0) {
+          editorState.cursorRow--;
+          editorState.cursorCol = (
+            editorState.lines[editorState.cursorRow] ?? ""
+          ).length;
+        }
+        redrawEditor();
+        return;
+      }
+
+      // Tab — insert 2 spaces
+      if (bytes.length === 1 && bytes[0] === 0x09) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        editorState.lines[editorState.cursorRow] =
+          line.slice(0, editorState.cursorCol) +
+          "  " +
+          line.slice(editorState.cursorCol);
+        editorState.cursorCol += 2;
+        redrawEditor();
+        return;
+      }
+
+      // Printable characters
+      const str = data.toString("utf-8");
+      const firstByte = bytes[0];
+      if (
+        str.length > 0 &&
+        firstByte !== undefined &&
+        firstByte >= 0x20 &&
+        firstByte < 0x7f
+      ) {
+        const line = editorState.lines[editorState.cursorRow] ?? "";
+        editorState.lines[editorState.cursorRow] =
+          line.slice(0, editorState.cursorCol) +
+          str +
+          line.slice(editorState.cursorCol);
+        editorState.cursorCol += str.length;
+        redrawEditor();
+      }
+    };
+
+    process.stdin.on("data", onEditorData);
+    redrawEditor();
+  };
+
+  const showNotesList = (notes: NotesListEntry[]) => {
+    showingOverlay = true;
+    const listState = createNotesListState(notes);
+
+    const redrawList = () => {
+      process.stdout.write(
+        ansi.hideCursor() + renderNotesList(listState, cols, rows),
+      );
+    };
+
+    const closeList = () => {
+      process.stdin.removeListener("data", onListData);
+      showingOverlay = false;
+      process.stdout.write(ansi.clearScreen());
+      renderScreen();
+    };
+
+    const onListData = (data: Buffer) => {
+      const bytes = Array.from(data);
+
+      // Escape
+      if (bytes.length === 1 && bytes[0] === 0x1b) {
+        closeList();
+        return;
+      }
+
+      // Delete confirmation mode
+      if (listState.confirmDelete) {
+        if (bytes.length === 1 && bytes[0] === 0x79) {
+          // 'y'
+          const note = listState.notes[listState.selectedIndex];
+          if (note) {
+            connection.send({ type: "notes:delete", noteId: note.id } as any);
+            listState.notes.splice(listState.selectedIndex, 1);
+            if (
+              listState.selectedIndex >= listState.notes.length &&
+              listState.selectedIndex > 0
+            ) {
+              listState.selectedIndex--;
+            }
+          }
+          listState.confirmDelete = false;
+          redrawList();
+        } else {
+          listState.confirmDelete = false;
+          redrawList();
+        }
+        return;
+      }
+
+      // Enter — open note in editor
+      if (bytes.length === 1 && bytes[0] === 0x0d) {
+        const note = listState.notes[listState.selectedIndex];
+        if (note) {
+          closeList();
+          showNoteEditor(note.id, note.content);
+        }
+        return;
+      }
+
+      // 'd' — delete
+      if (bytes.length === 1 && bytes[0] === 0x64) {
+        if (listState.notes.length > 0) {
+          listState.confirmDelete = true;
+          redrawList();
+        }
+        return;
+      }
+
+      // Arrow Up or 'k'
+      if (
+        (bytes.length === 3 &&
+          bytes[0] === 0x1b &&
+          bytes[1] === 0x5b &&
+          bytes[2] === 0x41) ||
+        (bytes.length === 1 && bytes[0] === 0x6b)
+      ) {
+        if (listState.selectedIndex > 0) {
+          listState.selectedIndex--;
+          redrawList();
+        }
+        return;
+      }
+
+      // Arrow Down or 'j'
+      if (
+        (bytes.length === 3 &&
+          bytes[0] === 0x1b &&
+          bytes[1] === 0x5b &&
+          bytes[2] === 0x42) ||
+        (bytes.length === 1 && bytes[0] === 0x6a)
+      ) {
+        if (listState.selectedIndex < listState.notes.length - 1) {
+          listState.selectedIndex++;
+          redrawList();
+        }
+        return;
+      }
+    };
+
+    process.stdin.on("data", onListData);
+    redrawList();
   };
 
   // Cleanup
