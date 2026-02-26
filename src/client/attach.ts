@@ -9,7 +9,15 @@ import { InputRouter, parsePrefixKey } from "../input/router.ts";
 import { KeybindingRegistry } from "../input/keybindings.ts";
 import { StatusBarRenderer } from "../statusbar/renderer.ts";
 import type { SystemMetrics } from "../statusbar/types.ts";
-import { getBorderChars, type BorderStyle } from "../renderer/border.ts";
+import {
+  getBorderChars,
+  getLineChars,
+  type BorderStyle,
+  type LineStyle,
+  type BorderSegment,
+  type BorderCellMeta,
+} from "../renderer/border.ts";
+import { getAllPaneIds } from "../core/layout.ts";
 import * as ansi from "../renderer/ansi.ts";
 import {
   createSessionFinderState,
@@ -107,6 +115,7 @@ export async function attachToSession(
   let sessions: SessionInfo[] = [];
   let activeSession = "";
   let activePaneId = "";
+  let previousPaneId = "";
   let showingOverlay = false;
   let showingPrefixHelp = false;
   let prefixActive = false;
@@ -258,21 +267,36 @@ export async function attachToSession(
     return out;
   };
 
-  // Collect all border cells from the layout tree
+  // Collect all border cells from the layout tree with segment metadata
   const collectBorderCells = (
     node: LayoutNode,
     bounds: Rect,
-    cells: Set<string>,
+    cells: Map<string, BorderCellMeta>,
   ): void => {
     if (node.type === "leaf") return;
 
     const { direction, ratio, children } = node;
+    const firstChildPanes = getAllPaneIds(children[0]);
+    const secondChildPanes = getAllPaneIds(children[1]);
 
     if (direction === "horizontal") {
-      // Vertical border at splitX column, spanning full height
       const splitX = Math.floor(bounds.x + bounds.width * ratio);
+      const segment: BorderSegment = {
+        orientation: "v",
+        fixedCoord: splitX,
+        start: bounds.y,
+        end: bounds.y + bounds.height,
+        firstChildPanes,
+        secondChildPanes,
+      };
       for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
-        cells.add(`${splitX},${y}`);
+        const key = `${splitX},${y}`;
+        const existing = cells.get(key);
+        if (existing) {
+          existing.segments.push(segment);
+        } else {
+          cells.set(key, { x: splitX, y, segments: [segment] });
+        }
       }
       const firstBounds: Rect = {
         x: bounds.x,
@@ -289,10 +313,23 @@ export async function attachToSession(
       collectBorderCells(children[0], firstBounds, cells);
       collectBorderCells(children[1], secondBounds, cells);
     } else {
-      // Horizontal border at splitY row, spanning full width
       const splitY = Math.floor(bounds.y + bounds.height * ratio);
+      const segment: BorderSegment = {
+        orientation: "h",
+        fixedCoord: splitY,
+        start: bounds.x,
+        end: bounds.x + bounds.width,
+        firstChildPanes,
+        secondChildPanes,
+      };
       for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
-        cells.add(`${x},${splitY}`);
+        const key = `${x},${splitY}`;
+        const existing = cells.get(key);
+        if (existing) {
+          existing.segments.push(segment);
+        } else {
+          cells.set(key, { x, y: splitY, segments: [segment] });
+        }
       }
       const firstBounds: Rect = {
         x: bounds.x,
@@ -311,6 +348,66 @@ export async function attachToSession(
     }
   };
 
+  // Compute half-border color for a cell based on segment metadata
+  const computeHalfBorderColor = (
+    meta: BorderCellMeta,
+    activePaneForBorders: string,
+    borderFg: string,
+    activeBorderFg: string,
+  ): string => {
+    for (const seg of meta.segments) {
+      const inFirst = seg.firstChildPanes.includes(activePaneForBorders);
+      const inSecond = seg.secondChildPanes.includes(activePaneForBorders);
+      if (!inFirst && !inSecond) continue;
+
+      const midpoint = Math.floor((seg.start + seg.end) / 2);
+      // Variable axis coordinate: y for vertical lines, x for horizontal lines
+      const coord = seg.orientation === "v" ? meta.y : meta.x;
+
+      if (seg.orientation === "v") {
+        // Vertical line (left|right split)
+        // firstChild = left, secondChild = right
+        if (inFirst && coord < midpoint) return activeBorderFg;
+        if (inSecond && coord >= midpoint) return activeBorderFg;
+      } else {
+        // Horizontal line (top|bottom split)
+        // firstChild = top, secondChild = bottom
+        if (inFirst && coord < midpoint) return activeBorderFg;
+        if (inSecond && coord >= midpoint) return activeBorderFg;
+      }
+    }
+    return borderFg;
+  };
+
+  // Check if a cell is directly adjacent to the active pane (for junctions)
+  const isAdjacentToActive = (
+    x: number,
+    y: number,
+    rects: Map<string, Rect>,
+    activePaneForBorders: string,
+  ): boolean => {
+    const activeRect = rects.get(activePaneForBorders);
+    if (!activeRect) return false;
+    // Check if (x,y) is on any edge of the active pane rect
+    const adjRight =
+      x === activeRect.x + activeRect.width &&
+      y >= activeRect.y &&
+      y < activeRect.y + activeRect.height;
+    const adjLeft =
+      x === activeRect.x - 1 &&
+      y >= activeRect.y &&
+      y < activeRect.y + activeRect.height;
+    const adjBottom =
+      y === activeRect.y + activeRect.height &&
+      x >= activeRect.x &&
+      x < activeRect.x + activeRect.width;
+    const adjTop =
+      y === activeRect.y - 1 &&
+      x >= activeRect.x &&
+      x < activeRect.x + activeRect.width;
+    return adjRight || adjLeft || adjBottom || adjTop;
+  };
+
   const renderBordersFor = (
     layout: LayoutNode | null,
     rects: Map<string, Rect>,
@@ -323,49 +420,46 @@ export async function attachToSession(
     const borderChars = getBorderChars(
       config.theme.border.style as BorderStyle,
     );
+    const lineChars = getLineChars(config.theme.border.lineStyle as LineStyle);
     const borderFg = config.theme.border.fg;
     const activeBorderFg = config.theme.border.activeFg;
     const contentHeight = rows - 1;
 
-    // Collect all border cells from layout tree
-    const cells = new Set<string>();
+    // Collect all border cells with segment metadata
+    const cells = new Map<string, BorderCellMeta>();
     collectBorderCells(
       layout,
       { x: 0, y: 0, width: boundsWidth, height: contentHeight },
       cells,
     );
 
-    // Pre-compute border cells adjacent to active pane for O(1) lookup
-    const activeBorderCells = new Set<string>();
-    const activeRect = rects.get(activePaneForBorders);
-    if (activeRect) {
-      for (let y = activeRect.y; y < activeRect.y + activeRect.height; y++) {
-        const rKey = `${activeRect.x + activeRect.width},${y}`;
-        if (cells.has(rKey)) activeBorderCells.add(rKey);
-        const lKey = `${activeRect.x - 1},${y}`;
-        if (cells.has(lKey)) activeBorderCells.add(lKey);
-      }
-      for (let x = activeRect.x; x < activeRect.x + activeRect.width; x++) {
-        const bKey = `${x},${activeRect.y + activeRect.height}`;
-        if (cells.has(bKey)) activeBorderCells.add(bKey);
-        const tKey = `${x},${activeRect.y - 1}`;
-        if (cells.has(tKey)) activeBorderCells.add(tKey);
-      }
-    }
+    // Build a Set of keys for neighbor lookup
+    const cellKeys = new Set(cells.keys());
 
     let out = "";
     let currentColor = "";
 
-    for (const key of cells) {
-      const sep = key.indexOf(",");
-      const x = parseInt(key.substring(0, sep), 10);
-      const y = parseInt(key.substring(sep + 1), 10);
+    for (const [key, meta] of cells) {
+      const { x, y } = meta;
       if (y >= contentHeight) continue;
 
-      const hasUp = cells.has(`${x},${y - 1}`);
-      const hasDown = cells.has(`${x},${y + 1}`);
-      const hasLeft = cells.has(`${x - 1},${y}`);
-      const hasRight = cells.has(`${x + 1},${y}`);
+      const hasUp = cellKeys.has(`${x},${y - 1}`);
+      const hasDown = cellKeys.has(`${x},${y + 1}`);
+      const hasLeft = cellKeys.has(`${x - 1},${y}`);
+      const hasRight = cellKeys.has(`${x + 1},${y}`);
+
+      // Determine if this is a junction (T-piece, cross, corner) or straight line
+      const neighbors =
+        (hasUp ? 1 : 0) +
+        (hasDown ? 1 : 0) +
+        (hasLeft ? 1 : 0) +
+        (hasRight ? 1 : 0);
+      const isStraightVertical = hasUp && hasDown && !hasLeft && !hasRight;
+      const isStraightHorizontal = hasLeft && hasRight && !hasUp && !hasDown;
+      const isStraight =
+        isStraightVertical ||
+        isStraightHorizontal ||
+        (neighbors <= 1 && (hasUp || hasDown || hasLeft || hasRight));
 
       let ch: string;
       if (hasUp && hasDown && hasLeft && hasRight) {
@@ -379,9 +473,9 @@ export async function attachToSession(
       } else if (hasLeft && hasRight && hasUp) {
         ch = borderChars.teeBottom;
       } else if (hasUp && hasDown) {
-        ch = borderChars.vertical;
+        ch = lineChars.vertical;
       } else if (hasLeft && hasRight) {
-        ch = borderChars.horizontal;
+        ch = lineChars.horizontal;
       } else if (hasDown && hasRight) {
         ch = borderChars.topLeft;
       } else if (hasDown && hasLeft) {
@@ -391,12 +485,26 @@ export async function attachToSession(
       } else if (hasUp && hasLeft) {
         ch = borderChars.bottomRight;
       } else if (hasUp || hasDown) {
-        ch = borderChars.vertical;
+        ch = lineChars.vertical;
       } else {
-        ch = borderChars.horizontal;
+        ch = lineChars.horizontal;
       }
 
-      const color = activeBorderCells.has(key) ? activeBorderFg : borderFg;
+      // Color: straight segments use half-border, junctions use adjacency check
+      let color: string;
+      if (isStraight || neighbors <= 1) {
+        color = computeHalfBorderColor(
+          meta,
+          activePaneForBorders,
+          borderFg,
+          activeBorderFg,
+        );
+      } else {
+        color = isAdjacentToActive(x, y, rects, activePaneForBorders)
+          ? activeBorderFg
+          : borderFg;
+      }
+
       const colorSwitch = color !== currentColor ? ansi.fgHex(color) : "";
       currentColor = color;
 
@@ -674,7 +782,11 @@ export async function attachToSession(
             const activeWindow = session.windows.find(
               (w) => w.id === session.activeWindow,
             );
-            activePaneId = activeWindow?.activePane || "";
+            const newActivePaneId = activeWindow?.activePane || "";
+            if (newActivePaneId !== activePaneId && activePaneId !== "") {
+              previousPaneId = activePaneId;
+            }
+            activePaneId = newActivePaneId;
             debugLog("client", `activePane=${activePaneId}`);
 
             // Session has no windows left — server should have migrated us.
@@ -776,6 +888,7 @@ export async function attachToSession(
           paneRects.delete(msg.paneId);
           clientTerminals.remove(msg.paneId);
           knownPaneIds.delete(msg.paneId);
+          paneProcesses.delete(msg.paneId);
           debugLog("client", `pane exited: ${msg.paneId}`);
           scheduleRender();
           break;
@@ -805,6 +918,10 @@ export async function attachToSession(
 
         case "process-info": {
           const panes = msg.panes as Record<string, string>;
+          if (msg.full) {
+            // Full refresh from sendStateToClient — replace to clear stale entries
+            paneProcesses.clear();
+          }
           for (const [paneId, name] of Object.entries(panes)) {
             paneProcesses.set(paneId, name);
           }
@@ -967,7 +1084,17 @@ export async function attachToSession(
           | "down"
           | "left"
           | "right";
-        const targetId = findPaneInDirection(paneRects, activePaneId, dir);
+        debugLog(
+          "nav",
+          `dir=${dir} active=${activePaneId} inRects=${paneRects.has(activePaneId)} rectsKeys=[${[...paneRects.keys()].join(",")}] proc=${paneProcesses.get(activePaneId)}`,
+        );
+        const targetId = findPaneInDirection(
+          paneRects,
+          activePaneId,
+          dir,
+          previousPaneId,
+        );
+        debugLog("nav", `target=${targetId}`);
         if (targetId) {
           connection.send({
             type: "command",

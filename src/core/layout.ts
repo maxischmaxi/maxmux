@@ -116,44 +116,99 @@ export function findPaneInDirection(
   paneRects: Map<string, Rect>,
   currentPaneId: string,
   direction: "up" | "down" | "left" | "right",
+  preferredPaneId?: string,
 ): string | null {
   const currentRect = paneRects.get(currentPaneId);
   if (!currentRect) return null;
 
-  let bestId: string | null = null;
-  let bestDist = Infinity;
-
   const cx = currentRect.x + currentRect.width / 2;
   const cy = currentRect.y + currentRect.height / 2;
 
-  for (const [id, rect] of paneRects) {
-    if (id === currentPaneId) continue;
-
+  const isInDir = (id: string): boolean => {
+    const rect = paneRects.get(id);
+    if (!rect) return false;
     const px = rect.x + rect.width / 2;
     const py = rect.y + rect.height / 2;
-
-    let isInDirection = false;
     switch (direction) {
       case "up":
-        isInDirection = py < cy;
-        break;
+        return py < cy;
       case "down":
-        isInDirection = py > cy;
-        break;
+        return py > cy;
       case "left":
-        isInDirection = px < cx;
-        break;
+        return px < cx;
       case "right":
-        isInDirection = px > cx;
-        break;
+        return px > cx;
     }
+  };
 
-    if (isInDirection) {
-      const dist = Math.abs(px - cx) + Math.abs(py - cy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestId = id;
-      }
+  // Check if candidate overlaps with current pane on the perpendicular axis.
+  // For left/right: panes sharing vertical space (same "row") are preferred.
+  // For up/down: panes sharing horizontal space (same "column") are preferred.
+  const hasPerpendicularOverlap = (id: string): boolean => {
+    const rect = paneRects.get(id);
+    if (!rect) return false;
+    if (direction === "left" || direction === "right") {
+      return (
+        Math.min(currentRect.y + currentRect.height, rect.y + rect.height) >
+        Math.max(currentRect.y, rect.y)
+      );
+    }
+    return (
+      Math.min(currentRect.x + currentRect.width, rect.x + rect.width) >
+      Math.max(currentRect.x, rect.x)
+    );
+  };
+
+  // Collect directional candidates, partitioned by perpendicular overlap
+  const overlapping: string[] = [];
+  const nonOverlapping: string[] = [];
+
+  for (const [id] of paneRects) {
+    if (id === currentPaneId) continue;
+    if (!isInDir(id)) continue;
+    if (hasPerpendicularOverlap(id)) {
+      overlapping.push(id);
+    } else {
+      nonOverlapping.push(id);
+    }
+  }
+
+  // Prefer same-row/column candidates; fall back to all if none overlap
+  const candidates = overlapping.length > 0 ? overlapping : nonOverlapping;
+  if (candidates.length === 0) return null;
+
+  // Find nearest by Manhattan distance
+  let bestId: string | null = null;
+  let bestDist = Infinity;
+
+  for (const id of candidates) {
+    const rect = paneRects.get(id)!;
+    const px = rect.x + rect.width / 2;
+    const py = rect.y + rect.height / 2;
+    const dist = Math.abs(px - cx) + Math.abs(py - cy);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestId = id;
+    }
+  }
+
+  // Tiebreaker: prefer the previously focused pane when distances are nearly equal.
+  // In L-shape layouts, equidistant panes differ only by sub-pixel rounding —
+  // a 10% tolerance catches these ties without overriding clearly closer panes.
+  if (
+    preferredPaneId &&
+    preferredPaneId !== currentPaneId &&
+    preferredPaneId !== bestId &&
+    paneRects.has(preferredPaneId) &&
+    isInDir(preferredPaneId) &&
+    candidates.includes(preferredPaneId)
+  ) {
+    const prefRect = paneRects.get(preferredPaneId)!;
+    const px = prefRect.x + prefRect.width / 2;
+    const py = prefRect.y + prefRect.height / 2;
+    const prefDist = Math.abs(px - cx) + Math.abs(py - cy);
+    if (prefDist <= bestDist * 1.1) {
+      return preferredPaneId;
     }
   }
 

@@ -19,7 +19,7 @@ export type ServerMessage =
       type: "cursor-state";
       panes: Record<string, { cursorVisible: boolean; cursorStyle: number }>;
     }
-  | { type: "process-info"; panes: Record<string, string> }
+  | { type: "process-info"; panes: Record<string, string>; full?: boolean }
   | { type: "error"; message: string }
   | { type: "result"; success: boolean; data?: string; error?: string }
   | { type: "preview-output"; paneId: string; data: string }

@@ -80,6 +80,7 @@ export class ServerHandler {
   private configWatcher: ConfigWatcher | null = null;
   private configPath: string | null;
   private notesDb: NotesDB;
+  private windowPreviousPane: Map<string, string> = new Map();
 
   constructor(config: MaxMuxConfig, configPath?: string | null) {
     this.config = config;
@@ -1141,8 +1142,8 @@ export class ServerHandler {
       description: "Focus a specific pane by ID",
       execute: (ctx) => {
         const paneId = ctx.args?.paneId as string | undefined;
-        if (paneId && ctx.sessionId) {
-          this.sessions.setActivePane(ctx.sessionId, paneId);
+        if (paneId && ctx.sessionId && ctx.windowId) {
+          this.setActivePaneWithHistory(ctx.sessionId, ctx.windowId, paneId);
           this.broadcastState(ctx.sessionId);
           this.scheduleFocusSave();
         }
@@ -1289,7 +1290,7 @@ export class ServerHandler {
       cwdOverride,
     );
 
-    window.activePane = newPaneId;
+    this.setActivePaneWithHistory(sessionId, window.id, newPaneId);
 
     // Update window title immediately to include the new pane
     const session = this.sessions.getSession(sessionId);
@@ -1299,6 +1300,18 @@ export class ServerHandler {
 
     this.broadcastState(sessionId);
     this.saveImmediate();
+  }
+
+  private setActivePaneWithHistory(
+    sessionId: string,
+    windowId: string,
+    paneId: string,
+  ): void {
+    const window = this.sessions.getActiveWindow(sessionId);
+    if (window && window.activePane !== paneId) {
+      this.windowPreviousPane.set(windowId, window.activePane);
+    }
+    this.sessions.setActivePane(sessionId, paneId);
   }
 
   sendStateToClient(clientId: string, replay = true): void {
@@ -1440,12 +1453,11 @@ export class ServerHandler {
           processInfoPanes[pane.id] = procName;
         }
       }
-      if (Object.keys(processInfoPanes).length > 0) {
-        this.broadcaster.send(clientId, {
-          type: "process-info",
-          panes: processInfoPanes,
-        });
-      }
+      this.broadcaster.send(clientId, {
+        type: "process-info",
+        panes: processInfoPanes,
+        full: true,
+      });
     }
 
     // Uncork — flushes all batched messages as one chunk
@@ -1747,14 +1759,16 @@ export class ServerHandler {
       width: cols,
       height: rows - 1,
     });
+    const previousPaneId = this.windowPreviousPane.get(window.id);
     const targetPane = findPaneInDirection(
       paneRects,
       window.activePane,
       direction,
+      previousPaneId,
     );
 
     if (targetPane) {
-      this.sessions.setActivePane(session.id, targetPane);
+      this.setActivePaneWithHistory(session.id, window.id, targetPane);
       this.broadcastState(session.id);
       this.broadcaster.send(clientId, { type: "result", success: true });
     } else {

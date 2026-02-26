@@ -3,7 +3,12 @@ import type { VirtualTerminal } from "../core/terminal.ts";
 import type { MaxMuxConfig } from "../config/schema.ts";
 import type { StatusBarItem } from "../plugins/types.ts";
 import { ScreenBuffer } from "./screen.ts";
-import { getBorderChars, type BorderStyle } from "./border.ts";
+import {
+  getBorderChars,
+  getLineChars,
+  type BorderStyle,
+  type LineStyle,
+} from "./border.ts";
 import * as ansi from "./ansi.ts";
 
 export class Compositor {
@@ -124,30 +129,39 @@ export class Compositor {
     activeBorderFg: string,
     contentHeight: number,
   ): void {
-    // Draw vertical dividers between panes
+    const lineChars = getLineChars(
+      this.config.theme.border.lineStyle as LineStyle,
+    );
     const rects = [...paneRects.entries()];
 
     for (let i = 0; i < rects.length; i++) {
       const [paneId, rect] = rects[i]!;
 
-      // Check if there's a pane to the right that needs a divider
       for (let j = 0; j < rects.length; j++) {
         if (i === j) continue;
-        const [, otherRect] = rects[j]!;
+        const [otherPaneId, otherRect] = rects[j]!;
 
         // Vertical divider: this pane's right edge meets other pane's left edge
         if (rect.x + rect.width + 1 === otherRect.x) {
           const dividerX = rect.x + rect.width;
-          const fg = paneId === activePaneId ? activeBorderFg : borderFg;
           const startY = Math.max(rect.y, otherRect.y);
           const endY = Math.min(
             rect.y + rect.height,
             otherRect.y + otherRect.height,
             contentHeight,
           );
+          const midY = Math.floor((startY + endY) / 2);
 
           for (let y = startY; y < endY; y++) {
-            this.screen.set(dividerX, y, borderChars.vertical, fg);
+            let fg: string;
+            if (paneId === activePaneId) {
+              fg = y < midY ? activeBorderFg : borderFg;
+            } else if (otherPaneId === activePaneId) {
+              fg = y >= midY ? activeBorderFg : borderFg;
+            } else {
+              fg = borderFg;
+            }
+            this.screen.set(dividerX, y, lineChars.vertical, fg);
           }
         }
 
@@ -155,15 +169,23 @@ export class Compositor {
         if (rect.y + rect.height + 1 === otherRect.y) {
           const dividerY = rect.y + rect.height;
           if (dividerY >= contentHeight) continue;
-          const fg = paneId === activePaneId ? activeBorderFg : borderFg;
           const startX = Math.max(rect.x, otherRect.x);
           const endX = Math.min(
             rect.x + rect.width,
             otherRect.x + otherRect.width,
           );
+          const midX = Math.floor((startX + endX) / 2);
 
           for (let x = startX; x < endX; x++) {
-            this.screen.set(x, dividerY, borderChars.horizontal, fg);
+            let fg: string;
+            if (paneId === activePaneId) {
+              fg = x < midX ? activeBorderFg : borderFg;
+            } else if (otherPaneId === activePaneId) {
+              fg = x >= midX ? activeBorderFg : borderFg;
+            } else {
+              fg = borderFg;
+            }
+            this.screen.set(x, dividerY, lineChars.horizontal, fg);
           }
         }
       }

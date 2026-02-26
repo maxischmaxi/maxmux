@@ -69,6 +69,7 @@ export const StatusBarThemeSchema = z.object({
 
 export const BorderThemeSchema = z.object({
   style: z.enum(["rounded", "sharp", "double", "none"]).default("rounded"),
+  lineStyle: z.enum(["solid", "dashed", "dotted"]).default("solid"),
   fg: z.string().default("#585b70"),
   activeFg: z.string().default("#89b4fa"),
 });
@@ -81,6 +82,7 @@ export const ThemeSchema = z.object({
   })),
   border: BorderThemeSchema.default(() => ({
     style: "rounded" as const,
+    lineStyle: "solid" as const,
     fg: "#585b70",
     activeFg: "#89b4fa",
   })),
@@ -166,6 +168,7 @@ export const ConfigSchema = z.object({
     statusBar: { bg: "#1e1e2e", fg: "#cdd6f4", active: "#89b4fa" },
     border: {
       style: "rounded" as const,
+      lineStyle: "solid" as const,
       fg: "#585b70",
       activeFg: "#89b4fa",
     },
@@ -227,6 +230,13 @@ export interface BorderThemeInput {
    * - `"none"` — Keine sichtbaren Rahmen
    * @default "rounded" */
   style?: "rounded" | "sharp" | "double" | "none";
+  /** Linienstil fuer gerade Border-Segmente.
+   * Ecken, T-Stuecke und Kreuze verwenden immer die Zeichen aus `style`.
+   * - `"solid"` — Durchgezogene Linien (─ │)
+   * - `"dashed"` — Gestrichelte Linien (┄ ┆)
+   * - `"dotted"` — Gepunktete Linien (┈ ┊)
+   * @default "solid" */
+  lineStyle?: "solid" | "dashed" | "dotted";
   /** Farbe der Rahmenlinien fuer inaktive Panes (Hex).
    * @default "#585b70" */
   fg?: string;

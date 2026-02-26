@@ -66,8 +66,28 @@ local function navigate(direction)
 	end
 	table.insert(cmd, "select-pane")
 	table.insert(cmd, info.flag)
-	-- Use jobstart (async) to avoid blocking Neovim if the command hangs
-	vim.fn.jobstart(cmd, { detach = true })
+	-- Use jobstart (async) to avoid blocking Neovim if the command hangs.
+	-- on_exit reports failures so users can diagnose broken navigation.
+	local job_id = vim.fn.jobstart(cmd, {
+		on_exit = function(_, code)
+			if code ~= 0 then
+				vim.schedule(function()
+					vim.notify(
+						"maxmux-navigator: select-pane " .. info.flag .. " failed (exit " .. code .. ")",
+						vim.log.levels.WARN
+					)
+				end)
+			end
+		end,
+	})
+	if job_id == 0 then
+		vim.notify("maxmux-navigator: invalid arguments for jobstart", vim.log.levels.ERROR)
+	elseif job_id == -1 then
+		vim.notify(
+			"maxmux-navigator: executable not found: " .. (M.config.maxmux_executable:match("%S+") or "?"),
+			vim.log.levels.ERROR
+		)
+	end
 end
 
 local function setup_keymaps()

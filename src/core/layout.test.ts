@@ -269,6 +269,352 @@ describe("findPaneInDirection", () => {
     ]);
     expect(findPaneInDirection(rects, "nonexistent", "right")).toBeNull();
   });
+
+  test("3-pane L-shape: right panes can navigate left to left pane", () => {
+    // Layout: 1 left, 2 right (top-right + bottom-right)
+    // +--------+--------+
+    // |        | top-R  |
+    // |  left  +--------+
+    // |        | bot-R  |
+    // +--------+--------+
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+    const rects = calculateLayout(layout, {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 23,
+    });
+
+    // From b (top-right), going left should reach a (left)
+    expect(findPaneInDirection(rects, "b", "left")).toBe("a");
+    // From c (bottom-right), going left should reach a (left)
+    expect(findPaneInDirection(rects, "c", "left")).toBe("a");
+    // From a (left), going right should reach one of the right panes
+    expect(findPaneInDirection(rects, "a", "right")).not.toBeNull();
+
+    // Vertical navigation on the right side
+    expect(findPaneInDirection(rects, "b", "down")).toBe("c");
+    expect(findPaneInDirection(rects, "c", "up")).toBe("b");
+  });
+
+  test("3-pane L-shape: full bidirectional navigation at various sizes", () => {
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+
+    const sizes = [
+      { width: 80, height: 24 },
+      { width: 120, height: 40 },
+      { width: 200, height: 50 },
+      { width: 40, height: 12 },
+    ];
+
+    for (const { width, height } of sizes) {
+      const rects = calculateLayout(layout, { x: 0, y: 0, width, height });
+
+      // All 3 panes must exist with positive dimensions
+      expect(rects.size).toBe(3);
+      for (const [, rect] of rects) {
+        expect(rect.width).toBeGreaterThan(0);
+        expect(rect.height).toBeGreaterThan(0);
+      }
+
+      // Left ↔ Right navigation
+      expect(findPaneInDirection(rects, "b", "left")).toBe("a");
+      expect(findPaneInDirection(rects, "c", "left")).toBe("a");
+      const rightTarget = findPaneInDirection(rects, "a", "right");
+      expect(rightTarget === "b" || rightTarget === "c").toBe(true);
+
+      // Vertical navigation on right side
+      expect(findPaneInDirection(rects, "b", "down")).toBe("c");
+      expect(findPaneInDirection(rects, "c", "up")).toBe("b");
+
+      // Left pane spans full height; right panes are above/below its center
+      // so "up" from a → b (top-right) and "down" from a → c (bottom-right)
+      expect(findPaneInDirection(rects, "a", "up")).toBe("b");
+      expect(findPaneInDirection(rects, "a", "down")).toBe("c");
+    }
+  });
+
+  test("returns null for activePaneId not in paneRects", () => {
+    const rects = new Map<string, Rect>([
+      ["a", { x: 0, y: 0, width: 40, height: 24 }],
+      ["b", { x: 41, y: 0, width: 39, height: 24 }],
+    ]);
+
+    expect(findPaneInDirection(rects, "stale-id", "left")).toBeNull();
+    expect(findPaneInDirection(rects, "stale-id", "right")).toBeNull();
+    expect(findPaneInDirection(rects, "stale-id", "up")).toBeNull();
+    expect(findPaneInDirection(rects, "stale-id", "down")).toBeNull();
+    expect(findPaneInDirection(rects, "", "left")).toBeNull();
+  });
+
+  test("preferredPaneId in correct direction is returned", () => {
+    // L-shape: a(left), b(top-right), c(bottom-right)
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+    const rects = calculateLayout(layout, {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 24,
+    });
+
+    // From a, going right with preferred=c → should return c (not b)
+    expect(findPaneInDirection(rects, "a", "right", "c")).toBe("c");
+    // From a, going right with preferred=b → should return b
+    expect(findPaneInDirection(rects, "a", "right", "b")).toBe("b");
+  });
+
+  test("preferredPaneId in wrong direction is ignored", () => {
+    const rects = new Map<string, Rect>([
+      ["left", { x: 0, y: 0, width: 40, height: 24 }],
+      ["right", { x: 41, y: 0, width: 39, height: 24 }],
+    ]);
+
+    // Preferred is to the right, but direction is left → ignored
+    expect(findPaneInDirection(rects, "left", "left", "right")).toBeNull();
+  });
+
+  test("preferredPaneId farther away than best candidate is ignored", () => {
+    // L-shape: from C going up, A is technically "up" but B is much closer
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+    const rects = calculateLayout(layout, {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 24,
+    });
+
+    // From C going up with preferred=a → B is closer, so B should win
+    expect(findPaneInDirection(rects, "c", "up", "a")).toBe("b");
+  });
+
+  test("preferredPaneId not in paneRects is ignored", () => {
+    const rects = new Map<string, Rect>([
+      ["a", { x: 0, y: 0, width: 40, height: 24 }],
+      ["b", { x: 41, y: 0, width: 39, height: 24 }],
+    ]);
+
+    // Preferred pane doesn't exist → falls back to normal algorithm
+    expect(findPaneInDirection(rects, "a", "right", "nonexistent")).toBe("b");
+  });
+
+  test("preferredPaneId === currentPaneId is ignored", () => {
+    const rects = new Map<string, Rect>([
+      ["a", { x: 0, y: 0, width: 40, height: 24 }],
+      ["b", { x: 41, y: 0, width: 39, height: 24 }],
+    ]);
+
+    // Preferred is same as current → falls back to normal algorithm
+    expect(findPaneInDirection(rects, "a", "right", "a")).toBe("b");
+  });
+
+  test("L-shape roundtrip: C→A via left, then A→C via right with preferred", () => {
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+    const rects = calculateLayout(layout, {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 24,
+    });
+
+    // User is in C, navigates left to A
+    const fromC = findPaneInDirection(rects, "c", "left");
+    expect(fromC).toBe("a");
+
+    // User is now in A, navigates right with preferred=c → should return c
+    const backToC = findPaneInDirection(rects, "a", "right", "c");
+    expect(backToC).toBe("c");
+
+    // Same but starting from B
+    const fromB = findPaneInDirection(rects, "b", "left");
+    expect(fromB).toBe("a");
+
+    // User is now in A, navigates right with preferred=b → should return b
+    const backToB = findPaneInDirection(rects, "a", "right", "b");
+    expect(backToB).toBe("b");
+  });
+
+  test("4-pane layout: left/right prefers same-row neighbor over closer cross-row pane", () => {
+    // +--------+--------+
+    // |        |   B    |
+    // |   A    +---+----+
+    // |        | C | D  |
+    // +--------+---+----+
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            {
+              type: "split",
+              direction: "horizontal",
+              ratio: 0.5,
+              children: [
+                { type: "leaf", paneId: "c" },
+                { type: "leaf", paneId: "d" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    // Test at various terminal sizes to ensure it works regardless of dimensions
+    const sizes = [
+      { width: 80, height: 24 },
+      { width: 160, height: 30 },
+      { width: 200, height: 50 },
+      { width: 120, height: 40 },
+    ];
+
+    for (const { width, height } of sizes) {
+      const rects = calculateLayout(layout, { x: 0, y: 0, width, height });
+
+      // D → left should go to C (same row), not B
+      expect(findPaneInDirection(rects, "d", "left")).toBe("c");
+
+      // C → right should go to D (same row), not B
+      expect(findPaneInDirection(rects, "c", "right")).toBe("d");
+
+      // C → left should go to A (only pane further left)
+      expect(findPaneInDirection(rects, "c", "left")).toBe("a");
+
+      // D → up should go to B (directly above)
+      expect(findPaneInDirection(rects, "d", "up")).toBe("b");
+
+      // C → up should go to B (directly above)
+      expect(findPaneInDirection(rects, "c", "up")).toBe("b");
+    }
+  });
+
+  test("paneRects after JSON serialization roundtrip", () => {
+    // Simulates server→client transfer where Map becomes Record and back
+    const layout: LayoutNode = {
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", paneId: "a" },
+        {
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { type: "leaf", paneId: "b" },
+            { type: "leaf", paneId: "c" },
+          ],
+        },
+      ],
+    };
+
+    const originalRects = calculateLayout(layout, {
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 40,
+    });
+
+    // Simulate JSON roundtrip (server sends Record, client rebuilds Map)
+    const asRecord: Record<string, Rect> = {};
+    for (const [id, rect] of originalRects) {
+      asRecord[id] = rect;
+    }
+    const json = JSON.stringify(asRecord);
+    const parsed = JSON.parse(json) as Record<string, Rect>;
+    const restored = new Map(Object.entries(parsed));
+
+    // Navigation should work identically after roundtrip
+    expect(findPaneInDirection(restored, "b", "left")).toBe("a");
+    expect(findPaneInDirection(restored, "c", "left")).toBe("a");
+    expect(findPaneInDirection(restored, "b", "down")).toBe("c");
+    expect(findPaneInDirection(restored, "c", "up")).toBe("b");
+  });
 });
 
 // --- getAllPaneIds ---

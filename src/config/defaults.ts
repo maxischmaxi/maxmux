@@ -49,6 +49,7 @@ export const DEFAULT_CONFIG: MaxMuxConfig = {
     },
     border: {
       style: "rounded",
+      lineStyle: "solid",
       fg: "#585b70",
       activeFg: "#89b4fa",
     },

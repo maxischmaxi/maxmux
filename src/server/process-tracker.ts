@@ -10,6 +10,11 @@ type GetPanesFn = () => Array<{ paneId: string; pid: number; command: string }>;
 type OnTitleChangeFn = (paneId: string, processName: string) => void;
 type OnCwdChangeFn = (paneId: string, cwd: string) => void;
 
+// Safety timeout: if a tracking tick takes longer than this, force-reset the
+// running flag so the tracker doesn't stall permanently.  This guards against
+// /proc reads that never resolve (zombie processes, kernel edge cases, etc.).
+const TICK_TIMEOUT_MS = 10_000;
+
 export class ProcessTracker {
   private interval: ReturnType<typeof setInterval> | null = null;
   private lastProcess: Map<string, string> = new Map();
@@ -28,6 +33,9 @@ export class ProcessTracker {
     this.interval = setInterval(async () => {
       if (this.running) return;
       this.running = true;
+      const safetyTimer = setTimeout(() => {
+        this.running = false;
+      }, TICK_TIMEOUT_MS);
       try {
         const panes = getPanes();
         for (const { paneId, pid, command } of panes) {
@@ -51,6 +59,7 @@ export class ProcessTracker {
           }
         }
       } finally {
+        clearTimeout(safetyTimer);
         this.running = false;
       }
     }, intervalMs);
