@@ -2175,15 +2175,25 @@ export async function attachToSession(
 
       if (motion && baseButton === MOUSE_LEFT) {
         // Mouse drag — update selection end, clamp to pane bounds
-        selectionState.phase = "selecting";
-        selectionState.endCol = Math.max(
+        const newCol = Math.max(
           0,
           Math.min(screenX - selRect.x, selRect.width - 1),
         );
-        selectionState.endRow = Math.max(
+        const newRow = Math.max(
           0,
           Math.min(screenY - selRect.y, selRect.height - 1),
         );
+        // Only start selecting once the mouse moves to a different cell
+        if (
+          selectionState.phase === "pressed" &&
+          newCol === selectionState.startCol &&
+          newRow === selectionState.startRow
+        ) {
+          return;
+        }
+        selectionState.phase = "selecting";
+        selectionState.endCol = newCol;
+        selectionState.endRow = newRow;
         scheduleRender();
         return;
       }

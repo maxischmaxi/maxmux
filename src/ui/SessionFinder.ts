@@ -1,3 +1,4 @@
+import { Fzf } from "fzf";
 import * as ansi from "../renderer/ansi.ts";
 import { renderBox, renderList, renderText } from "./components.ts";
 
@@ -26,15 +27,13 @@ export function createSessionFinderState(
   };
 }
 
-export function fuzzyMatch(query: string, text: string): boolean {
-  if (query === "") return true;
-  return text.toLowerCase().includes(query.toLowerCase());
-}
-
 export function updateFilter(state: SessionFinderState): void {
-  state.filtered = state.allSessions.filter((s) =>
-    fuzzyMatch(state.query, s.name),
-  );
+  if (state.query === "") {
+    state.filtered = [...state.allSessions];
+  } else {
+    const fzf = new Fzf(state.allSessions, { selector: (s) => s.name });
+    state.filtered = fzf.find(state.query).map((r) => r.item);
+  }
   // Clamp selectedIndex
   if (state.filtered.length === 0) {
     state.selectedIndex = 0;

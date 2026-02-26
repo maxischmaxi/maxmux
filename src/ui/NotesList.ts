@@ -1,3 +1,4 @@
+import { Fzf } from "fzf";
 import * as ansi from "../renderer/ansi.ts";
 import { renderBox, renderList, renderText } from "./components.ts";
 import { deriveTitle } from "../persistence/notes-db.ts";
@@ -28,14 +29,14 @@ export function createNotesListState(notes: NotesListEntry[]): NotesListState {
 }
 
 export function updateNotesFilter(state: NotesListState): void {
-  const q = state.query.toLowerCase();
-  state.filtered = state.allNotes.filter((n) => {
-    if (q === "") return true;
-    return (
-      deriveTitle(n.content).toLowerCase().includes(q) ||
-      n.content.toLowerCase().includes(q)
-    );
-  });
+  if (state.query === "") {
+    state.filtered = [...state.allNotes];
+  } else {
+    const fzf = new Fzf(state.allNotes, {
+      selector: (n) => deriveTitle(n.content) + " " + n.content,
+    });
+    state.filtered = fzf.find(state.query).map((r) => r.item);
+  }
   if (state.filtered.length === 0) {
     state.selectedIndex = 0;
   } else if (state.selectedIndex >= state.filtered.length) {

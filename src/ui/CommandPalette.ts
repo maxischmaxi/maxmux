@@ -1,3 +1,4 @@
+import { Fzf } from "fzf";
 import type { Command } from "../core/command.ts";
 import * as ansi from "../renderer/ansi.ts";
 import { renderBox, renderList, renderText } from "./components.ts";
@@ -20,12 +21,10 @@ export function createCommandPaletteState(): CommandPaletteState {
 
 export function filterCommands(commands: Command[], query: string): Command[] {
   if (!query) return commands;
-  const lower = query.toLowerCase();
-  return commands.filter(
-    (c) =>
-      c.id.toLowerCase().includes(lower) ||
-      c.description.toLowerCase().includes(lower),
-  );
+  const fzf = new Fzf(commands, {
+    selector: (c) => c.id + " " + c.description,
+  });
+  return fzf.find(query).map((r) => r.item);
 }
 
 export function renderCommandPalette(
