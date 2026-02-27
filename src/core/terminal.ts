@@ -60,6 +60,11 @@ export class VirtualTerminal {
     return this.terminal.modes.mouseTrackingMode !== "none";
   }
 
+  /** Check if the application in this terminal has enabled bracketed paste mode */
+  isBracketedPasteActive(): boolean {
+    return this.terminal.modes.bracketedPasteMode;
+  }
+
   setCursorVisible(visible: boolean): void {
     this._cursorVisible = visible;
   }
@@ -85,6 +90,12 @@ export class VirtualTerminal {
     const line = buffer.getLine(buffer.baseY + row);
     if (!line) return "";
     return line.translateToString(true);
+  }
+
+  isLineWrapped(row: number): boolean {
+    const buffer = this.terminal.buffer.active;
+    const line = buffer.getLine(buffer.baseY + row);
+    return line?.isWrapped ?? false;
   }
 
   getCellChar(row: number, col: number): string {

@@ -137,6 +137,9 @@ export async function attachToSession(
   let copyModeActive = false;
   let copyModeState: CopyModeState | null = null;
 
+  // Bracketed paste relay state
+  let outerBracketedPaste = false;
+
   // Sidebar state
   let sidebarActive = false;
   let sidebarState: SessionSidebarState | null = null;
@@ -259,9 +262,16 @@ export async function attachToSession(
     const paneHeight = Math.min(rect.height, contentHeight - rect.y);
     if (paneHeight <= 0) return "";
 
+    const paneReachesRightEdge = rect.x + xOffset + rect.width >= cols;
+
     let out = "";
     for (let y = 0; y < paneHeight; y++) {
-      out += ansi.moveTo(rect.x + xOffset, rect.y + y);
+      if (y > 0 && paneReachesRightEdge && term.isLineWrapped(y)) {
+        // Skip moveTo — let content flow naturally for soft-wrap URL detection.
+        // After the previous full-width line, cursor auto-wraps to next row.
+      } else {
+        out += ansi.moveTo(rect.x + xOffset, rect.y + y);
+      }
       out += term.renderLine(y);
     }
     return out;
@@ -666,6 +676,18 @@ export async function attachToSession(
 
     process.stdout.write(out);
     drawStatusBar();
+    syncBracketedPaste();
+  };
+
+  const syncBracketedPaste = () => {
+    const activeTerm = clientTerminals.get(activePaneId);
+    const want = activeTerm ? activeTerm.isBracketedPasteActive() : false;
+    if (want !== outerBracketedPaste) {
+      outerBracketedPaste = want;
+      process.stdout.write(
+        want ? ansi.enableBracketedPaste() : ansi.disableBracketedPaste(),
+      );
+    }
   };
 
   const scheduleRender = () => {
@@ -2236,6 +2258,9 @@ export async function attachToSession(
     if (config.mouse) {
       process.stdout.write(ansi.disableMouse());
     }
+    if (outerBracketedPaste) {
+      process.stdout.write(ansi.disableBracketedPaste());
+    }
     process.stdout.write(ansi.exitAltScreen());
     process.stdout.write(ansi.showCursor());
     process.stdout.write(ansi.resetStyle());
@@ -2606,7 +2631,9 @@ export async function attachToSession(
       try {
         process.stdin.setRawMode?.(false);
       } catch {}
-      process.stdout.write("\x1b[?1002l\x1b[?1006l\x1b[?1049l\x1b[?25h\x1b[0m");
+      process.stdout.write(
+        "\x1b[?2004l\x1b[?1002l\x1b[?1006l\x1b[?1049l\x1b[?25h\x1b[0m",
+      );
     }
   });
 }

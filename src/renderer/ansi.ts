@@ -49,6 +49,10 @@ export const exitAltScreen = () => `${CSI}?1049l`;
 export const enableMouse = () => `${CSI}?1002h${CSI}?1006h`;
 export const disableMouse = () => `${CSI}?1002l${CSI}?1006l`;
 
+// Bracketed paste mode
+export const enableBracketedPaste = () => `${CSI}?2004h`;
+export const disableBracketedPaste = () => `${CSI}?2004l`;
+
 /**
  * Parse a hex color string to RGB values.
  */
