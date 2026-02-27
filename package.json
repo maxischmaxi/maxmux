@@ -1,6 +1,6 @@
 {
   "name": "@maxischmaxi/maxmux",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Modern terminal session manager — a tmux alternative built with TypeScript",
   "type": "module",
   "bin": {

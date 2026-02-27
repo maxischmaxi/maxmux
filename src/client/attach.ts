@@ -266,7 +266,12 @@ export async function attachToSession(
 
     let out = "";
     for (let y = 0; y < paneHeight; y++) {
-      if (y > 0 && paneReachesRightEdge && term.isLineWrapped(y)) {
+      if (
+        y > 0 &&
+        paneReachesRightEdge &&
+        rect.x + xOffset === 0 &&
+        term.isLineWrapped(y)
+      ) {
         // Skip moveTo — let content flow naturally for soft-wrap URL detection.
         // After the previous full-width line, cursor auto-wraps to next row.
       } else {
