@@ -1,5 +1,6 @@
 pub mod schema;
 pub mod loader;
+pub mod watcher;
 
 #[cfg(test)]
 mod tests;
@@ -12,3 +13,5 @@ pub use schema::{
 };
 
 pub use loader::{find_config_file, load_config, load_config_from_path, ConfigLoadError};
+
+pub use watcher::{ConfigWatchError, ConfigWatcher};
