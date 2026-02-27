@@ -182,6 +182,11 @@ impl TerminalManager {
     pub fn remove(&mut self, id: &str) -> Option<VirtualTerminal> {
         self.terminals.remove(id)
     }
+
+    /// Return the IDs of all managed terminals.
+    pub fn get_all_ids(&self) -> Vec<String> {
+        self.terminals.keys().cloned().collect()
+    }
 }
 
 impl Default for TerminalManager {
