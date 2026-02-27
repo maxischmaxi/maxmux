@@ -287,6 +287,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxmux-ipc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "maxmux-renderer"
 version = "0.1.0"
 dependencies = [
