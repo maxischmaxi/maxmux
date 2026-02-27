@@ -1,4 +1,9 @@
 use clap::{Parser, Subcommand};
+use std::collections::HashMap;
+use tokio::net::UnixStream;
+
+use maxmux_ipc::protocol::{ClientMessage, ServerMessage};
+use maxmux_ipc::transport::Connection;
 
 #[derive(Parser)]
 #[command(name = "maxmux", version, about = "A modern terminal multiplexer")]
@@ -38,14 +43,15 @@ async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Server) => server::daemon::run().await,
-        Some(Commands::Attach { session }) => client::attach::run(session).await,
+        Some(Commands::Attach { session }) => {
+            server::daemon::ensure_running().await;
+            client::attach::run(session).await;
+        }
         Some(Commands::KillServer) => {
-            // Connect and send kill - placeholder
-            tracing::info!("Kill server not yet fully implemented");
+            kill_server().await;
         }
         Some(Commands::ListSessions) => {
-            // Connect and list - placeholder
-            tracing::info!("List sessions not yet fully implemented");
+            list_sessions().await;
         }
         Some(Commands::NewSession { name }) => {
             server::daemon::ensure_running().await;
@@ -59,5 +65,57 @@ async fn main() {
     }
 }
 
-mod server;
+async fn kill_server() {
+    let path = server::daemon::socket_path();
+    if let Ok(stream) = UnixStream::connect(&path).await {
+        let mut conn = Connection::new(stream);
+        conn.send_message(&ClientMessage::Command {
+            id: "server:kill".to_string(),
+            args: HashMap::new(),
+        })
+        .await
+        .ok();
+        println!("Kill signal sent to server");
+    } else {
+        eprintln!("Server is not running");
+    }
+}
+
+async fn list_sessions() {
+    let path = server::daemon::socket_path();
+    if let Ok(stream) = UnixStream::connect(&path).await {
+        let mut conn = Connection::new(stream);
+        // Send attach with no session to get state back
+        conn.send_message(&ClientMessage::Attach {
+            session_id: None,
+            cwd: None,
+        })
+        .await
+        .ok();
+        // Read state response
+        if let Ok(msg) = conn.read_message::<ServerMessage>().await {
+            if let ServerMessage::State { sessions, .. } = msg {
+                if sessions.is_empty() {
+                    println!("No sessions");
+                } else {
+                    for s in &sessions {
+                        println!(
+                            "{}: {} ({} windows, {} clients)",
+                            s.id,
+                            s.name,
+                            s.windows.len(),
+                            s.attached_clients.len()
+                        );
+                    }
+                }
+            }
+        }
+        // Detach cleanly
+        conn.send_message(&ClientMessage::Detach).await.ok();
+    } else {
+        eprintln!("Server is not running");
+    }
+}
+
 mod client;
+mod server;
