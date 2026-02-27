@@ -6,6 +6,7 @@
 // - 5 separator styles (powerline, rounded, flat, arrow, slant)
 // - A renderer that composes segments into an ANSI-escaped status bar line
 
+pub mod modules;
 pub mod renderer;
 pub mod separators;
 pub mod themes;
