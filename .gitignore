@@ -36,3 +36,6 @@ maxmux
 
 # Rust build artifacts
 rust/target
+
+# Git worktrees
+.worktrees
