@@ -1,9 +1,11 @@
 pub mod attach;
+pub mod bracketed_paste;
 pub mod command_palette;
 pub mod copy_mode;
 pub mod note_editor;
 pub mod notes_list;
 pub mod prefix_help;
 pub mod rename_dialog;
+pub mod selection;
 pub mod session_finder;
 pub mod session_sidebar;

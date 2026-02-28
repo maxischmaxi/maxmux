@@ -704,6 +704,7 @@ dependencies = [
  "maxmux-input",
  "maxmux-ipc",
  "maxmux-renderer",
+ "maxmux-statusbar",
  "nix",
  "nucleo",
  "serde",

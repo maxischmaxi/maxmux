@@ -12,6 +12,7 @@ maxmux-core = { path = "../maxmux-core" }
 maxmux-renderer = { path = "../maxmux-renderer" }
 maxmux-input = { path = "../maxmux-input" }
 maxmux-ipc = { path = "../maxmux-ipc" }
+maxmux-statusbar = { path = "../maxmux-statusbar" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
