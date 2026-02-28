@@ -217,13 +217,11 @@ impl CommandPalette {
         // -- top border: rounded corners ------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{256d}{}\u{256e}{}",
             goto(start_row, start_col),
             bg,
-            border_fg,
-            "\u{256d}", // rounded top-left
-            "\u{2500}".repeat(inner_width),
-            "\u{256e}", // rounded top-right
+            border_fg,                      // rounded top-left
+            "\u{2500}".repeat(inner_width), // rounded top-right
             reset,
         );
 
@@ -234,11 +232,10 @@ impl CommandPalette {
         let title_right_pad = title_padding - title_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}",
             goto(start_row + 1, start_col),
             bg,
-            border_fg,
-            "\u{2502}", // left border
+            border_fg, // left border
             title_fg,
             " ".repeat(title_left_pad),
             title,
@@ -246,7 +243,7 @@ impl CommandPalette {
             reset,
         );
         // right border
-        let _ = write!(out, "{}{}{}{}{}", bg, border_fg, "\u{2502}", reset, "",);
+        let _ = write!(out, "{}{}\u{2502}{}", bg, border_fg, reset,);
 
         // -- query line: "> {query}_" ----------------------------------------
         let cursor_char = "_";
@@ -259,28 +256,24 @@ impl CommandPalette {
         };
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}\u{2502}",
             goto(start_row + 2, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             text_fg,
             query_visible,
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- separator -------------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(start_row + 3, start_col),
             bg,
-            border_fg,
-            "\u{251c}", // left tee
-            "\u{2500}".repeat(inner_width),
-            "\u{2524}", // right tee
+            border_fg,                      // left tee
+            "\u{2500}".repeat(inner_width), // right tee
             reset,
         );
 
@@ -297,15 +290,13 @@ impl CommandPalette {
             };
             let _ = write!(
                 out,
-                "{}{}{}{}{}{}{}{}{}",
+                "{}{}{}\u{2502}{}{}{}\u{2502}{}",
                 goto(list_start_row, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 desc_fg,
                 msg_visible,
                 border_fg,
-                "\u{2502}",
                 reset,
             );
         } else {
@@ -334,11 +325,10 @@ impl CommandPalette {
 
                 let _ = write!(
                     out,
-                    "{}{}{}{}{}{}{}{}{}{}{}{}",
+                    "{}{}{}\u{2502}{}{}{}{}{}{}{}{}",
                     goto(list_start_row + vis_i, start_col),
                     row_bg,
                     border_fg,
-                    "\u{2502}",
                     id_color,
                     prefix,
                     &entry.id,
@@ -349,7 +339,7 @@ impl CommandPalette {
                     reset,
                 );
                 // right border
-                let _ = write!(out, "{}{}{}{}", row_bg, border_fg, "\u{2502}", reset,);
+                let _ = write!(out, "{}{}\u{2502}{}", row_bg, border_fg, reset,);
             }
         }
 
@@ -357,13 +347,11 @@ impl CommandPalette {
         let bottom_row = list_start_row + item_count.max(1);
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{2570}{}\u{256f}{}",
             goto(bottom_row, start_col),
             bg,
-            border_fg,
-            "\u{2570}", // rounded bottom-left
-            "\u{2500}".repeat(inner_width),
-            "\u{256f}", // rounded bottom-right
+            border_fg,                      // rounded bottom-left
+            "\u{2500}".repeat(inner_width), // rounded bottom-right
             reset,
         );
 

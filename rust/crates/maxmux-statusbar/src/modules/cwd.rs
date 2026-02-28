@@ -25,10 +25,10 @@ pub(crate) fn truncate_path(path: &str, max_length: usize) -> String {
 /// Replace home directory prefix with ~.
 fn replace_home(path: &str) -> String {
     // Try common home dir patterns.
-    if let Ok(home) = std::env::var("HOME") {
-        if path.starts_with(&home) {
-            return format!("~{}", &path[home.len()..]);
-        }
+    if let Ok(home) = std::env::var("HOME")
+        && path.starts_with(&home)
+    {
+        return format!("~{}", &path[home.len()..]);
     }
     // Also handle /home/user pattern for testing.
     path.to_string()

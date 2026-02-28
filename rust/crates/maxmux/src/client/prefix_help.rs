@@ -232,13 +232,11 @@ impl PrefixHelp {
         // -- top border -------------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{256d}{}\u{256e}{}",
             goto(start_row, start_col),
             bg,
             border_fg,
-            "\u{256d}",
             "\u{2500}".repeat(inner_width),
-            "\u{256e}",
             reset,
         );
 
@@ -249,30 +247,26 @@ impl PrefixHelp {
         let title_right_pad = title_padding - title_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(start_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title,
             " ".repeat(title_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- separator --------------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(start_row + 2, start_col),
             bg,
             border_fg,
-            "\u{251c}",
             "\u{2500}".repeat(inner_width),
-            "\u{2524}",
             reset,
         );
 
@@ -283,16 +277,14 @@ impl PrefixHelp {
             let msg_padding = inner_width.saturating_sub(msg.len());
             let _ = write!(
                 out,
-                "{}{}{}{}{}{}{}{}{}",
+                "{}{}{}\u{2502}{}{}{}{}\u{2502}",
                 goto(list_start_row, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 hint_fg,
                 msg,
                 " ".repeat(msg_padding),
                 border_fg,
-                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         } else {
@@ -315,11 +307,10 @@ impl PrefixHelp {
 
                 let _ = write!(
                     out,
-                    "{}{}{}{}{}{}{}{}{}{}{}{}{}",
+                    "{}{}{}\u{2502}{}{}{}{}{}{}{}{}\u{2502}",
                     goto(list_start_row + vis_i, start_col),
                     bg,
                     border_fg,
-                    "\u{2502}",
                     key_fg,
                     " ".repeat(left_pad),
                     key_display,
@@ -328,7 +319,6 @@ impl PrefixHelp {
                     desc_truncated,
                     " ".repeat(trailing_pad),
                     border_fg,
-                    "\u{2502}",
                 );
                 let _ = write!(out, "{}", reset);
             }
@@ -342,17 +332,15 @@ impl PrefixHelp {
         let hint_right_pad = hint_padding - hint_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(hint_row, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             hint_fg,
             " ".repeat(hint_left_pad),
             hint,
             " ".repeat(hint_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -360,13 +348,11 @@ impl PrefixHelp {
         let bottom_row = hint_row + 1;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{2570}{}\u{256f}{}",
             goto(bottom_row, start_col),
             bg,
             border_fg,
-            "\u{2570}",
             "\u{2500}".repeat(inner_width),
-            "\u{256f}",
             reset,
         );
 

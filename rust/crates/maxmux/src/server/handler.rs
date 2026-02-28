@@ -19,6 +19,7 @@ pub struct ServerState {
     pub sessions: SessionManager,
     pub ptys: PtyManager,
     pub terminals: TerminalManager,
+    #[allow(dead_code)]
     pub commands: CommandRegistry,
     pub broadcaster: Broadcaster,
     // Channels for PTY data/exit events
@@ -179,14 +180,12 @@ impl ServerState {
         let _ = self.spawn_pane(&pane_id, &shell, cols, rows, cwd);
 
         // Update PID in the session model
-        if let Some(pid) = self.get_pane_pid(&pane_id) {
-            if let Some(session) = self.sessions.get_mut(&session_id) {
-                if let Some(window) = session.windows.iter_mut().find(|w| w.id == window_id) {
-                    if let Some(pane) = window.panes.iter_mut().find(|p| p.id == pane_id) {
-                        pane.pid = Some(pid);
-                    }
-                }
-            }
+        if let Some(pid) = self.get_pane_pid(&pane_id)
+            && let Some(session) = self.sessions.get_mut(&session_id)
+            && let Some(window) = session.windows.iter_mut().find(|w| w.id == window_id)
+            && let Some(pane) = window.panes.iter_mut().find(|p| p.id == pane_id)
+        {
+            pane.pid = Some(pid);
         }
 
         session_id
@@ -231,14 +230,9 @@ pub async fn handle_client(stream: UnixStream, state: SharedState) {
     });
 
     // Read messages from client
-    loop {
-        match reader.read_message::<ClientMessage>().await {
-            Ok(msg) => {
-                let mut s = state.lock().await;
-                handle_message(&client_id, msg, &mut s);
-            }
-            Err(_) => break, // Client disconnected
-        }
+    while let Ok(msg) = reader.read_message::<ClientMessage>().await {
+        let mut s = state.lock().await;
+        handle_message(&client_id, msg, &mut s);
     }
 
     // Cleanup
@@ -253,10 +247,10 @@ pub async fn handle_client(stream: UnixStream, state: SharedState) {
         s.client_sizes.remove(&client_id);
         s.client_cwds.remove(&client_id);
         // Detach from session
-        if let Some(sid) = session_id {
-            if let Some(session) = s.sessions.get_mut(&sid) {
-                session.attached_clients.retain(|c| c != &client_id);
-            }
+        if let Some(sid) = session_id
+            && let Some(session) = s.sessions.get_mut(&sid)
+        {
+            session.attached_clients.retain(|c| c != &client_id);
         }
     }
     writer_handle.abort();
@@ -273,10 +267,10 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                 .broadcaster
                 .get_client_session(client_id)
                 .map(|s| s.to_string());
-            if let Some(sid) = session_id {
-                if let Some(session) = state.sessions.get_mut(&sid) {
-                    session.attached_clients.retain(|c| c != client_id);
-                }
+            if let Some(sid) = session_id
+                && let Some(session) = state.sessions.get_mut(&sid)
+            {
+                session.attached_clients.retain(|c| c != client_id);
             }
         }
         ClientMessage::Input { pane_id, data } => {
@@ -406,10 +400,10 @@ fn handle_attach(
 
     // Record client in session
     state.broadcaster.set_client_session(client_id, &sid);
-    if let Some(session) = state.sessions.get_mut(&sid) {
-        if !session.attached_clients.contains(&client_id.to_string()) {
-            session.attached_clients.push(client_id.to_string());
-        }
+    if let Some(session) = state.sessions.get_mut(&sid)
+        && !session.attached_clients.contains(&client_id.to_string())
+    {
+        session.attached_clients.push(client_id.to_string());
     }
 
     // Send state
@@ -438,17 +432,17 @@ fn replay_output_buffers(client_id: &str, session_id: &str, state: &ServerState)
     };
 
     for pane_id in pane_ids {
-        if let Some(buf) = state.output_buffers.get(&pane_id) {
-            if !buf.is_empty() {
-                let data = base64::engine::general_purpose::STANDARD.encode(buf);
-                state.broadcaster.send(
-                    client_id,
-                    ServerMessage::Output {
-                        pane_id: pane_id.clone(),
-                        data,
-                    },
-                );
-            }
+        if let Some(buf) = state.output_buffers.get(&pane_id)
+            && !buf.is_empty()
+        {
+            let data = base64::engine::general_purpose::STANDARD.encode(buf);
+            state.broadcaster.send(
+                client_id,
+                ServerMessage::Output {
+                    pane_id: pane_id.clone(),
+                    data,
+                },
+            );
         }
     }
 }
@@ -588,34 +582,33 @@ fn handle_split(
         height: content_height,
     };
 
-    if let Some(session) = state.sessions.get(session_id) {
-        if let Some(window) = session
+    if let Some(session) = state.sessions.get(session_id)
+        && let Some(window) = session
             .windows
             .iter()
             .find(|w| w.id == session.active_window)
-        {
-            let rects = calculate_layout(&window.layout, bounds);
-            if let Some(rect) = rects.get(&new_pane_id) {
-                let spawn_cwd = state
-                    .client_cwds
-                    .get(client_id)
-                    .cloned()
-                    .unwrap_or_else(|| cwd_for_new_pane.clone());
-                let _ = state.spawn_pane(
-                    &new_pane_id,
-                    &shell,
-                    rect.width,
-                    rect.height,
-                    Some(&spawn_cwd),
-                );
-            }
-            // Resize existing panes to their new dimensions
-            for (pid, rect) in &rects {
-                if pid != &new_pane_id {
-                    let _ = state.resize_pane(pid, rect.width, rect.height);
-                    if let Some(vt) = state.terminals.get_mut(pid) {
-                        vt.resize(rect.width, rect.height);
-                    }
+    {
+        let rects = calculate_layout(&window.layout, bounds);
+        if let Some(rect) = rects.get(&new_pane_id) {
+            let spawn_cwd = state
+                .client_cwds
+                .get(client_id)
+                .cloned()
+                .unwrap_or_else(|| cwd_for_new_pane.clone());
+            let _ = state.spawn_pane(
+                &new_pane_id,
+                &shell,
+                rect.width,
+                rect.height,
+                Some(&spawn_cwd),
+            );
+        }
+        // Resize existing panes to their new dimensions
+        for (pid, rect) in &rects {
+            if pid != &new_pane_id {
+                let _ = state.resize_pane(pid, rect.width, rect.height);
+                if let Some(vt) = state.terminals.get_mut(pid) {
+                    vt.resize(rect.width, rect.height);
                 }
             }
         }
@@ -637,27 +630,26 @@ fn handle_focus(
         .copied()
         .unwrap_or((80, 24));
 
-    if let Some(session) = state.sessions.get_mut(session_id) {
-        if let Some(window) = session
+    if let Some(session) = state.sessions.get_mut(session_id)
+        && let Some(window) = session
             .windows
             .iter_mut()
             .find(|w| w.id == session.active_window)
-        {
-            let status_bar_rows = 1u16;
-            let content_height = rows.saturating_sub(status_bar_rows);
-            let bounds = Rect {
-                x: 0,
-                y: 0,
-                width: cols,
-                height: content_height,
-            };
-            let rects = calculate_layout(&window.layout, bounds);
+    {
+        let status_bar_rows = 1u16;
+        let content_height = rows.saturating_sub(status_bar_rows);
+        let bounds = Rect {
+            x: 0,
+            y: 0,
+            width: cols,
+            height: content_height,
+        };
+        let rects = calculate_layout(&window.layout, bounds);
 
-            if let Some(new_pane) =
-                layout::find_pane_in_direction(&rects, &window.active_pane, dir, None)
-            {
-                window.active_pane = new_pane;
-            }
+        if let Some(new_pane) =
+            layout::find_pane_in_direction(&rects, &window.active_pane, dir, None)
+        {
+            window.active_pane = new_pane;
         }
     }
 
@@ -729,19 +721,19 @@ fn handle_window_close(client_id: &str, session_id: &str, state: &mut ServerStat
     }
 
     // Switch to remaining window or handle empty session
-    if let Some(session) = state.sessions.get(session_id) {
-        if session.windows.is_empty() {
-            // Last window closed - detach client
-            state.broadcaster.send(
-                client_id,
-                ServerMessage::Result {
-                    success: true,
-                    data: Some(serde_json::json!("detach")),
-                    error: None,
-                },
-            );
-            return;
-        }
+    if let Some(session) = state.sessions.get(session_id)
+        && session.windows.is_empty()
+    {
+        // Last window closed - detach client
+        state.broadcaster.send(
+            client_id,
+            ServerMessage::Result {
+                success: true,
+                data: Some(serde_json::json!("detach")),
+                error: None,
+            },
+        );
+        return;
     }
 
     send_state_to_client(client_id, session_id, state);
@@ -775,39 +767,39 @@ fn handle_pane_close(client_id: &str, session_id: &str, state: &mut ServerState)
         state.pane_to_window.remove(&pane_id);
 
         // Remove from layout and pane list
-        if let Some(session) = state.sessions.get_mut(session_id) {
-            if let Some(window) = session.windows.iter_mut().find(|w| w.id == window_id) {
-                window.panes.retain(|p| p.id != pane_id);
-                if let Some(new_layout) = layout::remove_from_layout(&window.layout, &pane_id) {
-                    window.layout = new_layout;
-                    // Set new active pane
-                    let remaining = layout::get_all_pane_ids(&window.layout);
-                    if let Some(first) = remaining.first() {
-                        window.active_pane = first.clone();
-                    }
+        if let Some(session) = state.sessions.get_mut(session_id)
+            && let Some(window) = session.windows.iter_mut().find(|w| w.id == window_id)
+        {
+            window.panes.retain(|p| p.id != pane_id);
+            if let Some(new_layout) = layout::remove_from_layout(&window.layout, &pane_id) {
+                window.layout = new_layout;
+                // Set new active pane
+                let remaining = layout::get_all_pane_ids(&window.layout);
+                if let Some(first) = remaining.first() {
+                    window.active_pane = first.clone();
                 }
+            }
 
-                if window.panes.is_empty() {
-                    let wid = window.id.clone();
-                    state.sessions.remove_window(session_id, &wid);
-                }
+            if window.panes.is_empty() {
+                let wid = window.id.clone();
+                state.sessions.remove_window(session_id, &wid);
             }
         }
     }
 
     // Check if session still has windows
-    if let Some(session) = state.sessions.get(session_id) {
-        if session.windows.is_empty() {
-            state.broadcaster.send(
-                client_id,
-                ServerMessage::Result {
-                    success: true,
-                    data: Some(serde_json::json!("detach")),
-                    error: None,
-                },
-            );
-            return;
-        }
+    if let Some(session) = state.sessions.get(session_id)
+        && session.windows.is_empty()
+    {
+        state.broadcaster.send(
+            client_id,
+            ServerMessage::Result {
+                success: true,
+                data: Some(serde_json::json!("detach")),
+                error: None,
+            },
+        );
+        return;
     }
 
     send_state_to_client(client_id, session_id, state);
@@ -832,14 +824,13 @@ fn compute_active_window_rects(
         height: content_height,
     };
 
-    if let Some(session) = state.sessions.get(session_id) {
-        if let Some(window) = session
+    if let Some(session) = state.sessions.get(session_id)
+        && let Some(window) = session
             .windows
             .iter()
             .find(|w| w.id == session.active_window)
-        {
-            return calculate_layout(&window.layout, bounds);
-        }
+    {
+        return calculate_layout(&window.layout, bounds);
     }
     HashMap::new()
 }
@@ -885,44 +876,43 @@ fn send_layout_to_client(
     rows: u16,
     state: &ServerState,
 ) {
-    if let Some(session) = state.sessions.get(session_id) {
-        if let Some(window) = session
+    if let Some(session) = state.sessions.get(session_id)
+        && let Some(window) = session
             .windows
             .iter()
             .find(|w| w.id == session.active_window)
-        {
-            let status_bar_rows = 1u16;
-            let content_height = rows.saturating_sub(status_bar_rows);
-            let bounds = Rect {
-                x: 0,
-                y: 0,
-                width: cols,
-                height: content_height,
-            };
-            let rects = calculate_layout(&window.layout, bounds);
+    {
+        let status_bar_rows = 1u16;
+        let content_height = rows.saturating_sub(status_bar_rows);
+        let bounds = Rect {
+            x: 0,
+            y: 0,
+            width: cols,
+            height: content_height,
+        };
+        let rects = calculate_layout(&window.layout, bounds);
 
-            let pane_rects: HashMap<String, RectData> = rects
-                .iter()
-                .map(|(id, r)| {
-                    (
-                        id.clone(),
-                        RectData {
-                            x: r.x,
-                            y: r.y,
-                            width: r.width,
-                            height: r.height,
-                        },
-                    )
-                })
-                .collect();
+        let pane_rects: HashMap<String, RectData> = rects
+            .iter()
+            .map(|(id, r)| {
+                (
+                    id.clone(),
+                    RectData {
+                        x: r.x,
+                        y: r.y,
+                        width: r.width,
+                        height: r.height,
+                    },
+                )
+            })
+            .collect();
 
-            state.broadcaster.send(
-                client_id,
-                ServerMessage::Layout {
-                    layout: serde_json::to_value(&window.layout).unwrap_or_default(),
-                    pane_rects,
-                },
-            );
-        }
+        state.broadcaster.send(
+            client_id,
+            ServerMessage::Layout {
+                layout: serde_json::to_value(&window.layout).unwrap_or_default(),
+                pane_rects,
+            },
+        );
     }
 }

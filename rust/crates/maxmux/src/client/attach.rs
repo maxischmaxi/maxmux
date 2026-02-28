@@ -143,9 +143,9 @@ pub async fn run(session_name: Option<String>) {
                                 }
 
                                 // Forward mouse to PTY if it's tracking mouse
-                                if let Some(vt) = terminals.get(&pane_id) {
-                                    if vt.is_mouse_tracking_active() {
-                                        if let Some(rect) = pane_rects.get(&pane_id) {
+                                if let Some(vt) = terminals.get(&pane_id)
+                                    && vt.is_mouse_tracking_active()
+                                        && let Some(rect) = pane_rects.get(&pane_id) {
                                             let local_x = event.x.saturating_sub(rect.x);
                                             let local_y = event.y.saturating_sub(rect.y);
                                             let encoded_mouse = maxmux_input::mouse::encode_sgr_mouse(
@@ -157,8 +157,6 @@ pub async fn run(session_name: Option<String>) {
                                                 data: encoded,
                                             }).await.ok();
                                         }
-                                    }
-                                }
                             }
                         }
                         _ => {}
@@ -172,11 +170,10 @@ pub async fn run(session_name: Option<String>) {
                     Ok(msg) => {
                         match msg {
                             ServerMessage::Output { pane_id, data } => {
-                                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&data) {
-                                    if let Some(vt) = terminals.get_mut(&pane_id) {
+                                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&data)
+                                    && let Some(vt) = terminals.get_mut(&pane_id) {
                                         vt.write(&bytes);
                                     }
-                                }
                                 render_screen(&mut compositor, &terminals, &pane_rects, &active_pane, &mut stdout);
                             }
                             ServerMessage::State { sessions, active_session: active_sid } => {
@@ -184,11 +181,10 @@ pub async fn run(session_name: Option<String>) {
                                     active_session = sid;
                                 }
                                 // Update active pane from state
-                                if let Some(session) = sessions.iter().find(|s| s.id == active_session) {
-                                    if let Some(window) = session.windows.iter().find(|w| w.id == session.active_window) {
+                                if let Some(session) = sessions.iter().find(|s| s.id == active_session)
+                                    && let Some(window) = session.windows.iter().find(|w| w.id == session.active_window) {
                                         active_pane = window.active_pane.clone();
                                     }
-                                }
                             }
                             ServerMessage::Layout { pane_rects: rects_data, .. } => {
                                 // Update pane rects
@@ -214,11 +210,10 @@ pub async fn run(session_name: Option<String>) {
                                 for (id, rd) in &rects_data {
                                     if terminals.get(id).is_none() {
                                         terminals.create(id.clone(), rd.width, rd.height, 10_000);
-                                    } else if let Some(vt) = terminals.get_mut(id) {
-                                        if vt.cols() != rd.width || vt.rows() != rd.height {
+                                    } else if let Some(vt) = terminals.get_mut(id)
+                                        && (vt.cols() != rd.width || vt.rows() != rd.height) {
                                             vt.resize(rd.width, rd.height);
                                         }
-                                    }
                                 }
 
                                 render_screen(&mut compositor, &terminals, &pane_rects, &active_pane, &mut stdout);
@@ -229,11 +224,10 @@ pub async fn run(session_name: Option<String>) {
                             }
                             ServerMessage::CursorState { .. } => {}
                             ServerMessage::Result { data, .. } => {
-                                if let Some(d) = data {
-                                    if d == serde_json::json!("detach") {
+                                if let Some(d) = data
+                                    && d == serde_json::json!("detach") {
                                         should_quit = true;
                                     }
-                                }
                             }
                             ServerMessage::Error { message } => {
                                 tracing::error!("Server error: {}", message);

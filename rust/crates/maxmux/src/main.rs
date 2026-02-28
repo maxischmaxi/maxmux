@@ -275,20 +275,20 @@ async fn list_sessions() {
         .await
         .ok();
         // Read state response
-        if let Ok(msg) = conn.read_message::<ServerMessage>().await {
-            if let ServerMessage::State { sessions, .. } = msg {
-                if sessions.is_empty() {
-                    println!("No sessions");
-                } else {
-                    for s in &sessions {
-                        println!(
-                            "{}: {} ({} windows, {} clients)",
-                            s.id,
-                            s.name,
-                            s.windows.len(),
-                            s.attached_clients.len()
-                        );
-                    }
+        if let Ok(msg) = conn.read_message::<ServerMessage>().await
+            && let ServerMessage::State { sessions, .. } = msg
+        {
+            if sessions.is_empty() {
+                println!("No sessions");
+            } else {
+                for s in &sessions {
+                    println!(
+                        "{}: {} ({} windows, {} clients)",
+                        s.id,
+                        s.name,
+                        s.windows.len(),
+                        s.attached_clients.len()
+                    );
                 }
             }
         }
@@ -300,6 +300,7 @@ async fn list_sessions() {
 }
 
 mod client;
+#[allow(dead_code)]
 mod remote;
 mod server;
 

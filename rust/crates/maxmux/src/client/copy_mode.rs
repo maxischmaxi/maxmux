@@ -254,16 +254,17 @@ impl CopyModeState {
 
     fn handle_navigate_key(&mut self, key: &str, viewport_height: usize) -> CopyModeAction {
         // Handle pending multi-key sequences
-        if let Some(pending) = self.pending_key.take() {
-            if pending == 'g' && key == "g" {
-                self.cursor_row = 0;
-                self.cursor_col = 0;
-                self.ensure_cursor_visible(viewport_height);
-                return CopyModeAction::ScrollChanged;
-            }
-            // If the second key doesn't complete a sequence, fall through
-            // to handle the new key normally.
+        if let Some(pending) = self.pending_key.take()
+            && pending == 'g'
+            && key == "g"
+        {
+            self.cursor_row = 0;
+            self.cursor_col = 0;
+            self.ensure_cursor_visible(viewport_height);
+            return CopyModeAction::ScrollChanged;
         }
+        // If the second key doesn't complete a sequence, fall through
+        // to handle the new key normally.
 
         match key {
             // -- movement -----------------------------------------------

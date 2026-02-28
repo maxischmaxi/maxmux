@@ -269,17 +269,16 @@ pub fn find_pane_in_direction(
     }
 
     // Tiebreaker: prefer the previously focused pane when distances are nearly equal
-    if let Some(pref_id) = preferred_id {
-        if pref_id != current_id
-            && best_id != Some(pref_id)
-            && pane_rects.contains_key(pref_id)
-            && is_in_dir(pref_id)
-            && candidates.contains(&pref_id)
-        {
-            let pref_dist = manhattan_dist(pref_id);
-            if pref_dist <= best_dist * 1.1 {
-                return Some(pref_id.to_string());
-            }
+    if let Some(pref_id) = preferred_id
+        && pref_id != current_id
+        && best_id != Some(pref_id)
+        && pane_rects.contains_key(pref_id)
+        && is_in_dir(pref_id)
+        && candidates.contains(&pref_id)
+    {
+        let pref_dist = manhattan_dist(pref_id);
+        if pref_dist <= best_dist * 1.1 {
+            return Some(pref_id.to_string());
         }
     }
 

@@ -164,10 +164,10 @@ fn normalize_path(path: &PathBuf) -> PathBuf {
         return p;
     }
     // File may not exist yet. Try canonicalizing the parent.
-    if let (Some(parent), Some(file_name)) = (path.parent(), path.file_name()) {
-        if let Ok(parent) = std::fs::canonicalize(parent) {
-            return parent.join(file_name);
-        }
+    if let (Some(parent), Some(file_name)) = (path.parent(), path.file_name())
+        && let Ok(parent) = std::fs::canonicalize(parent)
+    {
+        return parent.join(file_name);
     }
     path.clone()
 }

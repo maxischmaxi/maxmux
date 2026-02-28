@@ -8,49 +8,39 @@ use std::env;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BorderStyle {
+    #[default]
     Rounded,
     Sharp,
     Double,
     None,
 }
 
-impl Default for BorderStyle {
-    fn default() -> Self {
-        Self::Rounded
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum LineStyle {
+    #[default]
     Solid,
     Dashed,
     Dotted,
 }
 
-impl Default for LineStyle {
-    fn default() -> Self {
-        Self::Solid
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Position {
     Top,
+    #[default]
     Bottom,
 }
 
-impl Default for Position {
-    fn default() -> Self {
-        Self::Bottom
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SeparatorStyle {
+    #[default]
     Powerline,
     Rounded,
     Flat,
@@ -58,23 +48,13 @@ pub enum SeparatorStyle {
     Slant,
 }
 
-impl Default for SeparatorStyle {
-    fn default() -> Self {
-        Self::Powerline
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SessionListMode {
+    #[default]
     Sidebar,
     Overlay,
-}
-
-impl Default for SessionListMode {
-    fn default() -> Self {
-        Self::Sidebar
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,18 +116,10 @@ impl Default for BorderThemeConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ThemeConfig {
     pub status_bar: StatusBarThemeColors,
     pub border: BorderThemeConfig,
-}
-
-impl Default for ThemeConfig {
-    fn default() -> Self {
-        Self {
-            status_bar: StatusBarThemeColors::default(),
-            border: BorderThemeConfig::default(),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

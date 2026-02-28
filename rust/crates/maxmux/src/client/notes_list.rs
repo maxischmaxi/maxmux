@@ -294,13 +294,11 @@ impl NotesList {
         // -- top border -----------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{256d}{}\u{256e}{}",
             goto(start_row, start_col),
             bg,
             border_fg,
-            "\u{256d}",
             "\u{2500}".repeat(inner_width),
-            "\u{256e}",
             reset,
         );
 
@@ -311,17 +309,15 @@ impl NotesList {
         let title_right_pad = title_padding - title_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(start_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title,
             " ".repeat(title_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -335,28 +331,24 @@ impl NotesList {
         };
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}\u{2502}",
             goto(start_row + 2, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             text_fg,
             query_visible,
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- separator below query ------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(start_row + 3, start_col),
             bg,
             border_fg,
-            "\u{251c}",
             "\u{2500}".repeat(inner_width),
-            "\u{2524}",
             reset,
         );
 
@@ -373,17 +365,15 @@ impl NotesList {
             let msg_right = msg_padding - msg_left;
             let _ = write!(
                 out,
-                "{}{}{}{}{}{}{}{}{}{}",
+                "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
                 goto(list_start_row, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 hint_fg,
                 " ".repeat(msg_left),
                 msg,
                 " ".repeat(msg_right),
                 border_fg,
-                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         } else {
@@ -417,11 +407,10 @@ impl NotesList {
 
                 let _ = write!(
                     out,
-                    "{}{}{}{}{}{}{}{}{}{}{}",
+                    "{}{}{}\u{2502}{}{}{}{}{}{}{}",
                     goto(list_start_row + vis_i, start_col),
                     row_bg,
                     border_fg,
-                    "\u{2502}",
                     row_fg,
                     prefix,
                     title_truncated,
@@ -431,7 +420,7 @@ impl NotesList {
                     date_str,
                 );
                 // right border
-                let _ = write!(out, "{}{}{}{}", row_bg, border_fg, "\u{2502}", reset,);
+                let _ = write!(out, "{}{}\u{2502}{}", row_bg, border_fg, reset,);
             }
         }
 
@@ -439,13 +428,11 @@ impl NotesList {
         let hint_sep_row = list_start_row + display_rows;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(hint_sep_row, start_col),
             bg,
             border_fg,
-            "\u{251c}",
             "\u{2500}".repeat(inner_width),
-            "\u{2524}",
             reset,
         );
 
@@ -458,17 +445,15 @@ impl NotesList {
             let msg_right = msg_padding - msg_left;
             let _ = write!(
                 out,
-                "{}{}{}{}{}{}{}{}{}{}",
+                "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
                 goto(hint_row, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 delete_fg,
                 " ".repeat(msg_left),
                 msg,
                 " ".repeat(msg_right),
                 border_fg,
-                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         } else {
@@ -483,17 +468,15 @@ impl NotesList {
             let hint_right = hint_padding - hint_left;
             let _ = write!(
                 out,
-                "{}{}{}{}{}{}{}{}{}{}",
+                "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
                 goto(hint_row, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 hint_fg,
                 " ".repeat(hint_left),
                 hint_display,
                 " ".repeat(hint_right),
                 border_fg,
-                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         }
@@ -501,13 +484,11 @@ impl NotesList {
         // -- bottom border --------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{2570}{}\u{256f}{}",
             goto(hint_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2570}",
             "\u{2500}".repeat(inner_width),
-            "\u{256f}",
             reset,
         );
 

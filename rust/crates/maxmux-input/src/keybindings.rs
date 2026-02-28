@@ -30,10 +30,10 @@ impl KeybindingRegistry {
         let binding = self.bindings.get(key)?;
 
         // Check unless conditions
-        if let Some(proc) = current_process {
-            if binding.unless.iter().any(|u| u == proc) {
-                return None;
-            }
+        if let Some(proc) = current_process
+            && binding.unless.iter().any(|u| u == proc)
+        {
+            return None;
         }
 
         Some(&binding.command_id)

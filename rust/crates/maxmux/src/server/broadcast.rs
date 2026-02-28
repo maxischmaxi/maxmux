@@ -58,6 +58,7 @@ impl Broadcaster {
     }
 
     /// Return the number of connected clients.
+    #[allow(dead_code)]
     pub fn client_count(&self) -> usize {
         self.clients.len()
     }

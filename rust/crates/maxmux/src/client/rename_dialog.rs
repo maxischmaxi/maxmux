@@ -180,13 +180,11 @@ impl RenameDialog {
         // -- top border -------------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{256d}{}\u{256e}{}",
             goto(start_row, start_col),
             bg,
             border_fg,
-            "\u{256d}",
             "\u{2500}".repeat(inner_width),
-            "\u{256e}",
             reset,
         );
 
@@ -197,17 +195,15 @@ impl RenameDialog {
         let title_right_pad = title_padding - title_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(start_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title,
             " ".repeat(title_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -229,19 +225,14 @@ impl RenameDialog {
 
         // Calculate total visible content length
         let content_len = prompt_len + before_cursor.len() + 1 + after_cursor.len();
-        let trailing_pad = if content_len < inner_width {
-            inner_width - content_len
-        } else {
-            0
-        };
+        let trailing_pad = inner_width.saturating_sub(content_len);
 
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}{}{}{}{}",
             goto(start_row + 2, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             text_fg,
             prompt,
             before_cursor,
@@ -255,10 +246,9 @@ impl RenameDialog {
         // Fill remaining space and right border
         let _ = write!(
             out,
-            "{}{}{}{}",
+            "{}{}\u{2502}{}",
             " ".repeat(trailing_pad),
             border_fg,
-            "\u{2502}",
             reset,
         );
 
@@ -269,30 +259,26 @@ impl RenameDialog {
         let hint_right_pad = hint_padding - hint_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(start_row + 3, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             hint_fg,
             " ".repeat(hint_left_pad),
             hint,
             " ".repeat(hint_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- bottom border ----------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{2570}{}\u{256f}{}",
             goto(start_row + 4, start_col),
             bg,
             border_fg,
-            "\u{2570}",
             "\u{2500}".repeat(inner_width),
-            "\u{256f}",
             reset,
         );
 

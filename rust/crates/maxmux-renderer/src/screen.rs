@@ -223,6 +223,7 @@ impl ScreenBuffer {
     }
 
     /// Fill a rectangle with the given character and colors.
+    #[allow(clippy::too_many_arguments)]
     pub fn fill_rect(
         &mut self,
         x: u16,

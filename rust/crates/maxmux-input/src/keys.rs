@@ -49,7 +49,7 @@ pub fn parse_key(data: &[u8]) -> (Key, usize) {
         0x09 => (Key::Tab, 1),
         0x0d => (Key::Enter, 1),
         0x7f => (Key::Backspace, 1),
-        c if c >= 0x20 && c < 0x7f => (Key::Char(c as char), 1),
+        c if (0x20..0x7f).contains(&c) => (Key::Char(c as char), 1),
         // UTF-8 multi-byte: read full codepoint
         _ => parse_utf8(data),
     }
@@ -207,7 +207,7 @@ pub fn key_name(key: &Key) -> String {
 pub fn parse_prefix_key(name: &str) -> Option<u8> {
     if name.starts_with("C-") && name.len() == 3 {
         let c = name.as_bytes()[2].to_ascii_lowercase();
-        if c >= b'a' && c <= b'z' {
+        if c.is_ascii_lowercase() {
             Some(c - b'a' + 1)
         } else {
             None

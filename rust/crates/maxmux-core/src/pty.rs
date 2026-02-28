@@ -98,7 +98,7 @@ impl PtyManager {
         let shell_cstr =
             CString::new(shell).map_err(|e| PtyError::Open(format!("invalid shell path: {e}")))?;
         let cwd_cstr = cwd
-            .map(|p| CString::new(p))
+            .map(CString::new)
             .transpose()
             .map_err(|e| PtyError::Open(format!("invalid cwd path: {e}")))?;
 

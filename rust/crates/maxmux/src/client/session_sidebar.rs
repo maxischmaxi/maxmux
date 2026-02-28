@@ -379,11 +379,10 @@ impl SessionSidebar {
         for row in 1..=rows {
             let _ = write!(
                 out,
-                "{}{}{}{}{}",
+                "{}{}{}\u{2502}{}",
                 goto(row, border_col),
                 bg,
                 border_fg,
-                "\u{2502}",
                 reset,
             );
         }

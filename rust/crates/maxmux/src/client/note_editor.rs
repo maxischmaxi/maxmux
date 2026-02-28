@@ -345,13 +345,11 @@ impl NoteEditor {
         // -- top border -----------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{256d}{}\u{256e}{}",
             goto(start_row, start_col),
             bg,
             border_fg,
-            "\u{256d}",
             "\u{2500}".repeat(inner_width),
-            "\u{256e}",
             reset,
         );
 
@@ -367,30 +365,26 @@ impl NoteEditor {
         let title_right_pad = title_padding - title_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(start_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title_display,
             " ".repeat(title_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- separator below title ------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(start_row + 2, start_col),
             bg,
             border_fg,
-            "\u{251c}",
             "\u{2500}".repeat(inner_width),
-            "\u{2524}",
             reset,
         );
 
@@ -406,11 +400,10 @@ impl NoteEditor {
 
             let _ = write!(
                 out,
-                "{}{}{}{}",
+                "{}{}{}\u{2502}",
                 goto(content_start_row + vis_i, start_col),
                 bg,
                 border_fg,
-                "\u{2502}",
             );
 
             // Render the line content character by character (for cursor highlight)
@@ -467,20 +460,18 @@ impl NoteEditor {
             }
 
             // Right border
-            let _ = write!(out, "{}{}{}", border_fg, "\u{2502}", reset);
+            let _ = write!(out, "{}\u{2502}{}", border_fg, reset);
         }
 
         // -- separator above hint -------------------------------------------
         let hint_sep_row = content_start_row + content_rows;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{251c}{}\u{2524}{}",
             goto(hint_sep_row, start_col),
             bg,
             border_fg,
-            "\u{251c}",
             "\u{2500}".repeat(inner_width),
-            "\u{2524}",
             reset,
         );
 
@@ -496,30 +487,26 @@ impl NoteEditor {
         let hint_right_pad = hint_padding - hint_left_pad;
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}\u{2502}{}{}{}{}{}\u{2502}",
             goto(hint_sep_row + 1, start_col),
             bg,
             border_fg,
-            "\u{2502}",
             hint_fg,
             " ".repeat(hint_left_pad),
             hint_display,
             " ".repeat(hint_right_pad),
             border_fg,
-            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
         // -- bottom border --------------------------------------------------
         let _ = write!(
             out,
-            "{}{}{}{}{}{}{}",
+            "{}{}{}\u{2570}{}\u{256f}{}",
             goto(hint_sep_row + 2, start_col),
             bg,
             border_fg,
-            "\u{2570}",
             "\u{2500}".repeat(inner_width),
-            "\u{256f}",
             reset,
         );
 
