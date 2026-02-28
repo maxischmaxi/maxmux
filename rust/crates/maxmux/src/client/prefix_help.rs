@@ -27,6 +27,7 @@ pub enum PrefixHelpAction {
 pub struct PrefixHelp {
     pub bindings: Vec<KeyBinding>,
     pub scroll_offset: usize,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 

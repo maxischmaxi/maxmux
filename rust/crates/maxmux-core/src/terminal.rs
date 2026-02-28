@@ -147,6 +147,57 @@ impl VirtualTerminal {
     pub fn rows(&self) -> u16 {
         self.rows
     }
+
+    /// Total number of lines (screen + scrollback history).
+    pub fn total_lines(&self) -> usize {
+        self.term.grid().total_lines()
+    }
+
+    /// Get the character at the given absolute row and column.
+    ///
+    /// Row 0 is the topmost line in the scrollback buffer.
+    /// The last `self.rows` lines are the visible screen.
+    pub fn cell_char(&self, row: usize, col: usize) -> char {
+        let total = self.term.grid().total_lines();
+        if row >= total || col >= self.cols as usize {
+            return ' ';
+        }
+        // Convert absolute row to alacritty Line index:
+        // alacritty uses Line(0) = top of visible screen,
+        // negative = scrollback. We want row 0 = oldest scrollback line.
+        let history = total - self.rows as usize;
+        let line_idx = if row < history {
+            // In scrollback: negative line index
+            Line(-(history as i32 - row as i32))
+        } else {
+            // In visible area
+            Line((row - history) as i32)
+        };
+        let point = Point::new(line_idx, Column(col));
+        self.term.grid()[point].c
+    }
+
+    /// Get the number of non-empty columns in the given absolute row.
+    pub fn line_length(&self, row: usize) -> usize {
+        let total = self.term.grid().total_lines();
+        if row >= total {
+            return 0;
+        }
+        let history = total - self.rows as usize;
+        let line_idx = if row < history {
+            Line(-(history as i32 - row as i32))
+        } else {
+            Line((row - history) as i32)
+        };
+        let cols = self.cols as usize;
+        for col in (0..cols).rev() {
+            let point = Point::new(line_idx, Column(col));
+            if self.term.grid()[point].c != ' ' {
+                return col + 1;
+            }
+        }
+        0
+    }
 }
 
 /// Manages a collection of virtual terminals keyed by string ID.

@@ -16,6 +16,7 @@ pub enum NoteEditorAction {
         title: String,
         content: String,
     },
+    #[allow(dead_code)]
     Close,
 }
 
@@ -29,6 +30,7 @@ pub struct NoteEditor {
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub scroll_offset: usize,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 

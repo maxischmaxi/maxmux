@@ -101,6 +101,7 @@ impl SystemMetricsCollector {
     }
 
     /// Read the system hostname from `/proc/sys/kernel/hostname`.
+    #[allow(dead_code)]
     pub fn collect_hostname(&self) -> Option<String> {
         std::fs::read_to_string("/proc/sys/kernel/hostname")
             .ok()
@@ -108,6 +109,7 @@ impl SystemMetricsCollector {
     }
 
     /// Read the current username from the `$USER` environment variable.
+    #[allow(dead_code)]
     pub fn collect_username(&self) -> Option<String> {
         std::env::var("USER").ok()
     }
@@ -116,6 +118,7 @@ impl SystemMetricsCollector {
     ///
     /// Spawns `git rev-parse`, `git status`, and `git rev-list` to obtain
     /// branch name, dirty state, and ahead/behind counts.
+    #[allow(dead_code)]
     pub fn collect_git(&self, cwd: &str) -> Option<GitInfo> {
         use std::process::Command;
 

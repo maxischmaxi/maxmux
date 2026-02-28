@@ -49,6 +49,7 @@ impl ProcessTracker {
     ///
     /// Falls back to an empty list if the file is not readable (e.g. on
     /// kernels without `CONFIG_PROC_CHILDREN`).
+    #[allow(dead_code)]
     pub fn get_child_pids(pid: u32) -> Vec<u32> {
         let path = format!("/proc/{}/task/{}/children", pid, pid);
         match std::fs::read_to_string(&path) {
@@ -64,6 +65,7 @@ impl ProcessTracker {
     ///
     /// The kernel separates arguments with NUL bytes; we replace them with
     /// spaces for readability.
+    #[allow(dead_code)]
     pub fn get_cmdline(pid: u32) -> Option<String> {
         let raw = std::fs::read(format!("/proc/{}/cmdline", pid)).ok()?;
         if raw.is_empty() {

@@ -30,6 +30,7 @@ pub struct CommandPalette {
     pub selected_index: usize,
     pub commands: Vec<CommandEntry>,
     pub filtered: Vec<usize>, // indices into commands
+    #[allow(dead_code)]
     pub visible: bool,
 }
 

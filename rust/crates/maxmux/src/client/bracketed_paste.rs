@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // Bracketed paste relay – detects bracketed-paste mode sequences emitted by
 // inner applications and relays the mode change to the outer terminal.
 //

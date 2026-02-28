@@ -13,6 +13,8 @@ maxmux-renderer = { path = "../maxmux-renderer" }
 maxmux-input = { path = "../maxmux-input" }
 maxmux-ipc = { path = "../maxmux-ipc" }
 maxmux-statusbar = { path = "../maxmux-statusbar" }
+maxmux-config = { path = "../maxmux-config" }
+maxmux-persistence = { path = "../maxmux-persistence" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

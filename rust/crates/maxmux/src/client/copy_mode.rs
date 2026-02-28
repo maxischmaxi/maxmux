@@ -158,6 +158,7 @@ impl CopyModeState {
     }
 
     /// Build the selected text using buffer accessors.
+    #[allow(dead_code)]
     pub fn yank_selection(
         &self,
         get_cell: impl Fn(usize, usize) -> char,

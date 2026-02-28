@@ -11,6 +11,7 @@ use std::fmt::Write as FmtWrite;
 
 #[derive(Debug, Clone)]
 pub struct SidebarWindow {
+    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     pub index: usize,
@@ -29,6 +30,7 @@ pub struct SidebarSession {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SidebarPosition {
     Left,
+    #[allow(dead_code)]
     Right,
 }
 
@@ -46,9 +48,11 @@ pub enum SidebarAction {
 pub struct SessionSidebar {
     pub sessions: Vec<SidebarSession>,
     pub selected_index: usize,
+    #[allow(dead_code)]
     pub scroll_offset: usize,
     pub width: u16,
     pub position: SidebarPosition,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 
@@ -103,6 +107,7 @@ impl SessionSidebar {
     }
 
     /// Total number of display rows needed (sessions + windows of selected).
+    #[allow(dead_code)]
     fn total_display_rows(&self) -> usize {
         let mut count = self.sessions.len();
         if let Some(session) = self.sessions.get(self.selected_index) {

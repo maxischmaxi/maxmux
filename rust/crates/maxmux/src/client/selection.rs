@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // Mouse text selection – tracks click-drag selection state across pane cells.
 //
 // The client uses this to highlight selected text and eventually copy it to

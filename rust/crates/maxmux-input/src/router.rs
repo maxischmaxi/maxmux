@@ -108,6 +108,11 @@ impl InputRouter {
         actions
     }
 
+    /// Get immutable reference to prefix-mode keybindings.
+    pub fn prefix_bindings(&self) -> &KeybindingRegistry {
+        &self.prefix_bindings
+    }
+
     /// Get mutable reference to prefix-mode keybindings.
     pub fn prefix_bindings_mut(&mut self) -> &mut KeybindingRegistry {
         &mut self.prefix_bindings

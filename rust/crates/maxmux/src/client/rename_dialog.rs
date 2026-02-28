@@ -23,6 +23,7 @@ pub struct RenameDialog {
     pub title: String,
     pub value: String,
     pub cursor_pos: usize,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 

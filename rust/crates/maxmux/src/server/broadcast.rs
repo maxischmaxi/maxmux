@@ -62,6 +62,19 @@ impl Broadcaster {
     pub fn client_count(&self) -> usize {
         self.clients.len()
     }
+
+    /// Return all connected client IDs.
+    #[allow(dead_code)]
+    pub fn all_client_ids(&self) -> Vec<String> {
+        self.clients.keys().cloned().collect()
+    }
+
+    /// Broadcast a message to all connected clients.
+    pub fn send_to_all(&self, msg: ServerMessage) {
+        for tx in self.clients.values() {
+            let _ = tx.send(msg.clone());
+        }
+    }
 }
 
 impl Default for Broadcaster {

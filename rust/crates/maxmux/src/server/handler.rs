@@ -37,6 +37,10 @@ pub struct ServerState {
     pub pane_to_window: HashMap<PaneId, (String, String)>, // pane_id -> (session_id, window_id)
     // Output buffers (for replay on attach)
     pub output_buffers: HashMap<PaneId, Vec<u8>>,
+    // Notes database
+    pub notes_db: Option<maxmux_persistence::NotesDb>,
+    // Zoom state per session
+    pub zoomed_pane: HashMap<String, Option<PaneId>>,
 }
 
 impl ServerState {
@@ -59,6 +63,8 @@ impl ServerState {
             pane_to_pty: HashMap::new(),
             pane_to_window: HashMap::new(),
             output_buffers: HashMap::new(),
+            notes_db: maxmux_persistence::NotesDb::open(None).ok(),
+            zoomed_pane: HashMap::new(),
         }
     }
 
@@ -282,7 +288,7 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
         ClientMessage::Resize { cols, rows } => {
             handle_resize(client_id, cols, rows, state);
         }
-        ClientMessage::Command { id, args: _ } => {
+        ClientMessage::Command { id, args: args_ } => {
             let session_id = state
                 .broadcaster
                 .get_client_session(client_id)
@@ -338,6 +344,95 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                     "pane:close" => {
                         handle_pane_close(client_id, &session_id, state);
                     }
+                    "pane:focus" => {
+                        if let Some(pane_id) = args_.get("pane_id") {
+                            if let Some(session) = state.sessions.get_mut(&session_id)
+                                && let Some(window) = session
+                                    .windows
+                                    .iter_mut()
+                                    .find(|w| w.id == session.active_window)
+                                && window.panes.iter().any(|p| p.id == *pane_id)
+                            {
+                                window.active_pane = pane_id.clone();
+                            }
+                            send_state_to_client(client_id, &session_id, state);
+                            let (cols, rows) = state
+                                .client_sizes
+                                .get(client_id)
+                                .copied()
+                                .unwrap_or((80, 24));
+                            send_layout_to_client(client_id, &session_id, cols, rows, state);
+                        }
+                    }
+                    "pane:zoom" => {
+                        let current_zoom =
+                            state.zoomed_pane.get(&session_id).and_then(|p| p.clone());
+                        if let Some(session) = state.sessions.get(&session_id)
+                            && let Some(window) = session
+                                .windows
+                                .iter()
+                                .find(|w| w.id == session.active_window)
+                        {
+                            if current_zoom.as_deref() == Some(&window.active_pane) {
+                                state.zoomed_pane.insert(session_id.clone(), None);
+                            } else {
+                                state
+                                    .zoomed_pane
+                                    .insert(session_id.clone(), Some(window.active_pane.clone()));
+                            }
+                        }
+                        send_state_to_client(client_id, &session_id, state);
+                        let (cols, rows) = state
+                            .client_sizes
+                            .get(client_id)
+                            .copied()
+                            .unwrap_or((80, 24));
+                        send_layout_to_client(client_id, &session_id, cols, rows, state);
+                    }
+                    "pane:next" => {
+                        if let Some(session) = state.sessions.get_mut(&session_id)
+                            && let Some(window) = session
+                                .windows
+                                .iter_mut()
+                                .find(|w| w.id == session.active_window)
+                        {
+                            let pane_ids: Vec<String> = layout::get_all_pane_ids(&window.layout);
+                            if let Some(idx) =
+                                pane_ids.iter().position(|p| p == &window.active_pane)
+                            {
+                                let next = (idx + 1) % pane_ids.len();
+                                window.active_pane = pane_ids[next].clone();
+                            }
+                        }
+                        send_state_to_client(client_id, &session_id, state);
+                        let (cols, rows) = state
+                            .client_sizes
+                            .get(client_id)
+                            .copied()
+                            .unwrap_or((80, 24));
+                        send_layout_to_client(client_id, &session_id, cols, rows, state);
+                    }
+                    "session:set-name" => {
+                        if let Some(name) = args_.get("name") {
+                            if let Some(session) = state.sessions.get_mut(&session_id) {
+                                session.name = name.clone();
+                            }
+                            send_state_to_client(client_id, &session_id, state);
+                        }
+                    }
+                    "window:set-name" => {
+                        if let Some(name) = args_.get("name") {
+                            if let Some(session) = state.sessions.get_mut(&session_id)
+                                && let Some(window) = session
+                                    .windows
+                                    .iter_mut()
+                                    .find(|w| w.id == session.active_window)
+                            {
+                                window.name = name.clone();
+                            }
+                            send_state_to_client(client_id, &session_id, state);
+                        }
+                    }
                     "session:detach" => {
                         state.broadcaster.send(
                             client_id,
@@ -358,7 +453,127 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                 }
             }
         }
-        _ => {}
+        ClientMessage::NotesList => {
+            let notes = state
+                .notes_db
+                .as_ref()
+                .and_then(|db| db.list().ok())
+                .unwrap_or_default();
+            let note_data: Vec<NoteData> = notes
+                .iter()
+                .map(|n| NoteData {
+                    id: n.id.clone(),
+                    title: n.title.clone(),
+                    content: n.content.clone(),
+                    created_at: n.created_at,
+                    updated_at: n.updated_at,
+                })
+                .collect();
+            state
+                .broadcaster
+                .send(client_id, ServerMessage::NotesData { notes: note_data });
+        }
+        ClientMessage::NotesSave { id, title, content } => {
+            if let Some(db) = &state.notes_db {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let note_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                // Check if existing note to preserve created_at
+                let created_at = db
+                    .get(&note_id)
+                    .ok()
+                    .flatten()
+                    .map(|n| n.created_at)
+                    .unwrap_or(now);
+                let note = maxmux_persistence::Note {
+                    id: note_id.clone(),
+                    title: title.clone(),
+                    content: content.clone(),
+                    created_at,
+                    updated_at: now,
+                };
+                if db.save(&note).is_ok() {
+                    state.broadcaster.send(
+                        client_id,
+                        ServerMessage::NotesSaved {
+                            note: NoteData {
+                                id: note_id,
+                                title,
+                                content,
+                                created_at,
+                                updated_at: now,
+                            },
+                        },
+                    );
+                }
+            }
+        }
+        ClientMessage::NotesDelete { id } => {
+            if let Some(db) = &state.notes_db
+                && db.delete(&id).is_ok()
+            {
+                state
+                    .broadcaster
+                    .send(client_id, ServerMessage::NotesDeleted { id });
+            }
+        }
+        ClientMessage::RemoteCommand {
+            command,
+            args,
+            target: _,
+        } => {
+            // Find session for this client (or first available)
+            let session_id = state
+                .broadcaster
+                .get_client_session(client_id)
+                .map(|s| s.to_string())
+                .or_else(|| state.sessions.all().first().map(|s| s.id.clone()));
+            if let Some(session_id) = session_id {
+                let result = handle_remote_command_dispatch(
+                    client_id,
+                    &session_id,
+                    &command,
+                    args.as_deref(),
+                    state,
+                );
+                match result {
+                    Ok(data) => {
+                        state.broadcaster.send(
+                            client_id,
+                            ServerMessage::Result {
+                                success: true,
+                                data,
+                                error: None,
+                            },
+                        );
+                    }
+                    Err(err) => {
+                        state.broadcaster.send(
+                            client_id,
+                            ServerMessage::Result {
+                                success: false,
+                                data: None,
+                                error: Some(err),
+                            },
+                        );
+                    }
+                }
+            } else {
+                state.broadcaster.send(
+                    client_id,
+                    ServerMessage::Result {
+                        success: false,
+                        data: None,
+                        error: Some("No session available".to_string()),
+                    },
+                );
+            }
+        }
+        _ => {
+            tracing::warn!("Unhandled client message");
+        }
     }
 }
 
@@ -914,5 +1129,118 @@ fn send_layout_to_client(
                 pane_rects,
             },
         );
+    }
+}
+
+/// Dispatch a remote CLI command to the corresponding built-in handler.
+fn handle_remote_command_dispatch(
+    client_id: &str,
+    session_id: &str,
+    command: &str,
+    args: Option<&[String]>,
+    state: &mut ServerState,
+) -> Result<Option<serde_json::Value>, String> {
+    match command {
+        "split-window" => {
+            let dir = match args.and_then(|a| a.first()).map(|s| s.as_str()) {
+                Some("horizontal") => SplitDirection::Horizontal,
+                _ => SplitDirection::Vertical,
+            };
+            let (cols, rows) = state
+                .client_sizes
+                .get(client_id)
+                .copied()
+                .unwrap_or((80, 24));
+            handle_split(client_id, session_id, dir, cols, rows, state);
+            Ok(None)
+        }
+        "select-pane" => {
+            let dir_str = args
+                .and_then(|a| a.first())
+                .map(|s| s.as_str())
+                .unwrap_or("right");
+            let dir = match dir_str {
+                "left" => layout::Direction::Left,
+                "right" => layout::Direction::Right,
+                "up" => layout::Direction::Up,
+                "down" => layout::Direction::Down,
+                _ => return Err(format!("Unknown direction: {dir_str}")),
+            };
+            handle_focus(client_id, session_id, dir, state);
+            Ok(None)
+        }
+        "new-window" => {
+            let (cols, rows) = state
+                .client_sizes
+                .get(client_id)
+                .copied()
+                .unwrap_or((80, 24));
+            let cwd = state.client_cwds.get(client_id).cloned();
+            handle_window_create(client_id, session_id, cols, rows, cwd.as_deref(), state);
+            Ok(None)
+        }
+        "select-window" => {
+            if let Some(target) = args
+                .and_then(|a| a.first())
+                .and_then(|s| s.parse::<usize>().ok())
+                && let Some(session) = state.sessions.get_mut(session_id)
+                && let Some(window) = session.windows.get(target)
+            {
+                session.active_window = window.id.clone();
+                let (cols, rows) = state
+                    .client_sizes
+                    .get(client_id)
+                    .copied()
+                    .unwrap_or((80, 24));
+                send_state_to_client(client_id, session_id, state);
+                send_layout_to_client(client_id, session_id, cols, rows, state);
+            }
+            Ok(None)
+        }
+        "display-message" => {
+            let mut vars = serde_json::Map::new();
+            if let Some(session) = state.sessions.get(session_id) {
+                vars.insert(
+                    "session_name".into(),
+                    serde_json::Value::String(session.name.clone()),
+                );
+                vars.insert(
+                    "session_id".into(),
+                    serde_json::Value::String(session.id.clone()),
+                );
+                vars.insert(
+                    "window_count".into(),
+                    serde_json::json!(session.windows.len()),
+                );
+            }
+            // If -p flag and message template, resolve variables
+            if let Some(args) = args {
+                let has_print = args.iter().any(|a| a == "-p");
+                let template = args.iter().find(|a| *a != "-p");
+                if has_print && let Some(tmpl) = template {
+                    let mut result = tmpl.clone();
+                    for (k, v) in &vars {
+                        let var = format!("#{{{}}}", k);
+                        result = result.replace(&var, v.as_str().unwrap_or(""));
+                    }
+                    return Ok(Some(serde_json::Value::String(result)));
+                }
+            }
+            Ok(Some(serde_json::Value::Object(vars)))
+        }
+        "send-command" => {
+            if let Some(cmd) = args.and_then(|a| a.first()) {
+                handle_message(
+                    client_id,
+                    ClientMessage::Command {
+                        id: cmd.clone(),
+                        args: HashMap::new(),
+                    },
+                    state,
+                );
+            }
+            Ok(None)
+        }
+        _ => Err(format!("Unknown remote command: {command}")),
     }
 }

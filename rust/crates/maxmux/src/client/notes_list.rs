@@ -34,6 +34,7 @@ pub struct NotesList {
     pub entries: Vec<NotesListEntry>,
     pub filtered: Vec<usize>, // indices into entries
     pub confirm_delete: bool,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 

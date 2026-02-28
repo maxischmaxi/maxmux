@@ -40,6 +40,7 @@ pub struct SessionFinder {
     /// Indices into `entries` that match the current query, ordered by score
     /// (best first).
     pub filtered: Vec<usize>,
+    #[allow(dead_code)]
     pub visible: bool,
 }
 
