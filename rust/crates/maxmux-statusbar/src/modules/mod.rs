@@ -56,7 +56,7 @@ pub struct MemoryInfo {
 
 #[derive(Debug, Clone, Default)]
 pub struct BatteryInfo {
-    pub level: u8,     // 0-100
+    pub level: u8, // 0-100
     pub charging: bool,
     pub present: bool,
 }
@@ -459,9 +459,7 @@ mod tests {
         let m = cpu::CpuModule;
         let segs = m.render(&ctx);
         // Should contain bar characters.
-        assert!(
-            segs[0].text.contains('\u{2593}') || segs[0].text.contains('\u{2591}')
-        );
+        assert!(segs[0].text.contains('\u{2593}') || segs[0].text.contains('\u{2591}'));
     }
 
     #[test]

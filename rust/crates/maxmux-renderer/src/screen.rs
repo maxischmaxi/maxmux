@@ -60,14 +60,16 @@ impl CurrentStyle {
     fn apply(&mut self, cell: &ScreenCell, out: &mut String) {
         // If the cell has no style attributes and default colors, and we are
         // already in that state, skip entirely.
-        if *self == (CurrentStyle {
-            fg: cell.fg,
-            bg: cell.bg,
-            bold: cell.bold,
-            dim: cell.dim,
-            italic: cell.italic,
-            underline: cell.underline,
-        }) {
+        if *self
+            == (CurrentStyle {
+                fg: cell.fg,
+                bg: cell.bg,
+                bold: cell.bold,
+                dim: cell.dim,
+                italic: cell.italic,
+                underline: cell.underline,
+            })
+        {
             return;
         }
 
@@ -136,7 +138,12 @@ impl ScreenBuffer {
     pub fn new(cols: u16, rows: u16) -> Self {
         let cells = Self::make_grid(cols, rows);
         let prev_cells = cells.clone();
-        Self { cols, rows, cells, prev_cells }
+        Self {
+            cols,
+            rows,
+            cells,
+            prev_cells,
+        }
     }
 
     /// Resize the screen buffer, resetting all content.
@@ -266,9 +273,7 @@ impl ScreenBuffer {
         let mut dirty: Vec<(u16, u16)> = Vec::new();
         for y in 0..self.rows {
             for x in 0..self.cols {
-                if self.cells[y as usize][x as usize]
-                    != self.prev_cells[y as usize][x as usize]
-                {
+                if self.cells[y as usize][x as usize] != self.prev_cells[y as usize][x as usize] {
                     dirty.push((x, y));
                 }
             }

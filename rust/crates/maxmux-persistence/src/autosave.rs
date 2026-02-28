@@ -80,10 +80,7 @@ mod tests {
             count += 1;
         }
 
-        assert!(
-            count >= 2,
-            "expected at least 2 save signals, got {count}"
-        );
+        assert!(count >= 2, "expected at least 2 save signals, got {count}");
 
         handle.stop().await;
     }

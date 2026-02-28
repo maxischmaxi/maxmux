@@ -1,6 +1,5 @@
 /// Vi-style copy mode overlay for navigating scrollback buffer,
 /// selecting text, and copying to clipboard.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -104,7 +103,9 @@ impl CopyModeState {
     /// Last visible row index (inclusive).
     pub fn last_visible_row(&self, viewport_height: usize) -> usize {
         let first = self.first_visible_row(viewport_height);
-        (first + viewport_height).min(self.buffer_lines).saturating_sub(1)
+        (first + viewport_height)
+            .min(self.buffer_lines)
+            .saturating_sub(1)
     }
 
     /// Adjust `scroll_offset` so the cursor is within the visible viewport.
@@ -1024,15 +1025,7 @@ mod tests {
     #[test]
     fn test_render_non_empty() {
         let s = new_state();
-        let output = CopyModeRenderer::render(
-            &s,
-            |_row, _col| ' ',
-            |_row| 80,
-            0,
-            0,
-            80,
-            24,
-        );
+        let output = CopyModeRenderer::render(&s, |_row, _col| ' ', |_row| 80, 0, 0, 80, 24);
         assert!(!output.is_empty());
         // Should contain the position indicator
         assert!(output.contains("[100/100]"));
@@ -1048,15 +1041,7 @@ mod tests {
         s.handle_key("s", VP);
         s.handle_key("t", VP);
 
-        let output = CopyModeRenderer::render(
-            &s,
-            |_row, _col| ' ',
-            |_row| 80,
-            0,
-            0,
-            80,
-            24,
-        );
+        let output = CopyModeRenderer::render(&s, |_row, _col| ' ', |_row| 80, 0, 0, 80, 24);
         assert!(output.contains("/test"));
     }
 
@@ -1148,10 +1133,7 @@ mod tests {
         s.handle_key("l", 10);
         // anchor at (0,0), cursor at (0,4)
 
-        let text = s.yank_selection(
-            |_row, col| b"Hello World"[col] as char,
-            |_row| 11,
-        );
+        let text = s.yank_selection(|_row, col| b"Hello World"[col] as char, |_row| 11);
         assert_eq!(text, "Hello");
     }
 }

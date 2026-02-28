@@ -1,9 +1,9 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Key {
     Char(char),
-    Ctrl(char),     // C-a through C-z (0x01-0x1a)
-    Alt(char),      // ESC + char
-    AltCtrl(char),  // ESC + 0x01-0x1a (rare but possible)
+    Ctrl(char),    // C-a through C-z (0x01-0x1a)
+    Alt(char),     // ESC + char
+    AltCtrl(char), // ESC + 0x01-0x1a (rare but possible)
     Up,
     Down,
     Left,
@@ -38,9 +38,7 @@ pub fn parse_key(data: &[u8]) -> (Key, usize) {
             match data[1] {
                 b'[' => parse_csi(&data[2..]), // CSI sequence
                 b'O' => parse_ss3(&data[2..]), // SS3 (function keys)
-                c if (0x01..=0x1a).contains(&c) => {
-                    (Key::AltCtrl((c - 1 + b'a') as char), 2)
-                }
+                c if (0x01..=0x1a).contains(&c) => (Key::AltCtrl((c - 1 + b'a') as char), 2),
                 c => (Key::Alt(c as char), 2), // Alt + printable
             }
         }
@@ -113,9 +111,7 @@ fn parse_csi(data: &[u8]) -> (Key, usize) {
     while end < data.len() {
         if data[end] >= 0x40 && data[end] <= 0x7e {
             return (
-                Key::Unknown(
-                    [&[0x1b, b'['], &data[..=end]].concat(),
-                ),
+                Key::Unknown([&[0x1b, b'['], &data[..=end]].concat()),
                 2 + end + 1,
             );
         }
@@ -123,10 +119,7 @@ fn parse_csi(data: &[u8]) -> (Key, usize) {
     }
 
     // No terminator found, consume what we have
-    (
-        Key::Unknown([&[0x1b, b'['], data].concat()),
-        2 + data.len(),
-    )
+    (Key::Unknown([&[0x1b, b'['], data].concat()), 2 + data.len())
 }
 
 /// Parse SS3 sequences: ESC O ...

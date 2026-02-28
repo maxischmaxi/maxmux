@@ -1,8 +1,8 @@
 #[derive(Debug, Clone, PartialEq)]
 pub struct MouseEvent {
     pub button: u8,
-    pub x: u16,          // 0-based
-    pub y: u16,          // 0-based
+    pub x: u16, // 0-based
+    pub y: u16, // 0-based
     pub is_release: bool,
 }
 

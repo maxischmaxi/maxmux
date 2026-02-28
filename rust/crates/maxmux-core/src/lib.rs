@@ -1,5 +1,5 @@
-pub mod pty;
-pub mod terminal;
-pub mod session;
-pub mod layout;
 pub mod command;
+pub mod layout;
+pub mod pty;
+pub mod session;
+pub mod terminal;

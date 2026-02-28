@@ -2,7 +2,6 @@
 ///
 /// Presents a centered modal with a query input, a filterable list
 /// of notes, and options to open, delete, or create notes.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -20,8 +19,8 @@ pub struct NotesListEntry {
 pub enum NotesListAction {
     None,
     Open(String),   // note ID to open
-    Delete(String),  // note ID to delete
-    Create,          // create new note
+    Delete(String), // note ID to delete
+    Create,         // create new note
     Close,
 }
 
@@ -177,15 +176,15 @@ impl NotesList {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);       // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);       // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);             // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);         // #cdd6f4
-    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68);    // #313244
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68); // #313244
     pub const SELECTED_FG: (u8, u8, u8) = (137, 180, 250); // #89b4fa
-    pub const HINT: (u8, u8, u8) = (166, 173, 200);        // #a6adc8 (dim)
-    pub const DATE: (u8, u8, u8) = (166, 173, 200);        // #a6adc8
-    pub const DELETE_FG: (u8, u8, u8) = (243, 139, 168);   // #f38ba8 (red)
+    pub const HINT: (u8, u8, u8) = (166, 173, 200); // #a6adc8 (dim)
+    pub const DATE: (u8, u8, u8) = (166, 173, 200); // #a6adc8
+    pub const DELETE_FG: (u8, u8, u8) = (243, 139, 168); // #f38ba8 (red)
 }
 
 impl NotesList {
@@ -236,39 +235,57 @@ impl NotesList {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let sel_bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::SELECTED_BG.0, colors::SELECTED_BG.1, colors::SELECTED_BG.2
+            colors::SELECTED_BG.0,
+            colors::SELECTED_BG.1,
+            colors::SELECTED_BG.2
         );
         let sel_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::SELECTED_FG.0, colors::SELECTED_FG.1, colors::SELECTED_FG.2
+            colors::SELECTED_FG.0,
+            colors::SELECTED_FG.1,
+            colors::SELECTED_FG.2
         );
         let hint_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::HINT.0, colors::HINT.1, colors::HINT.2
+            colors::HINT.0,
+            colors::HINT.1,
+            colors::HINT.2
         );
         let date_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::DATE.0, colors::DATE.1, colors::DATE.2
+            colors::DATE.0,
+            colors::DATE.1,
+            colors::DATE.2
         );
         let delete_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::DELETE_FG.0, colors::DELETE_FG.1, colors::DELETE_FG.2
+            colors::DELETE_FG.0,
+            colors::DELETE_FG.1,
+            colors::DELETE_FG.2
         );
         let reset = "\x1b[0m";
 
@@ -279,7 +296,8 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}",
             goto(start_row, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{256d}",
             "\u{2500}".repeat(inner_width),
             "\u{256e}",
@@ -295,12 +313,15 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}{}{}{}",
             goto(start_row + 1, start_col),
-            bg, border_fg, "\u{2502}",
+            bg,
+            border_fg,
+            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title,
             " ".repeat(title_right_pad),
-            border_fg, "\u{2502}",
+            border_fg,
+            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -316,10 +337,13 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}{}",
             goto(start_row + 2, start_col),
-            bg, border_fg, "\u{2502}",
+            bg,
+            border_fg,
+            "\u{2502}",
             text_fg,
             query_visible,
-            border_fg, "\u{2502}",
+            border_fg,
+            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -328,7 +352,8 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}",
             goto(start_row + 3, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{251c}",
             "\u{2500}".repeat(inner_width),
             "\u{2524}",
@@ -350,21 +375,19 @@ impl NotesList {
                 out,
                 "{}{}{}{}{}{}{}{}{}{}",
                 goto(list_start_row, start_col),
-                bg, border_fg, "\u{2502}",
+                bg,
+                border_fg,
+                "\u{2502}",
                 hint_fg,
                 " ".repeat(msg_left),
                 msg,
                 " ".repeat(msg_right),
-                border_fg, "\u{2502}",
+                border_fg,
+                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         } else {
-            for (vis_i, &entry_idx) in self
-                .filtered
-                .iter()
-                .take(max_visible_items)
-                .enumerate()
-            {
+            for (vis_i, &entry_idx) in self.filtered.iter().take(max_visible_items).enumerate() {
                 let entry = &self.entries[entry_idx];
                 let is_selected = vis_i == self.selected_index;
 
@@ -379,8 +402,8 @@ impl NotesList {
                 // Format: "  {title}  {date}"
                 let prefix = if is_selected { "> " } else { "  " };
                 let spacer = "  ";
-                let avail_for_title = inner_width
-                    .saturating_sub(prefix.len() + spacer.len() + date_display_len);
+                let avail_for_title =
+                    inner_width.saturating_sub(prefix.len() + spacer.len() + date_display_len);
                 let title_truncated = if entry.title.len() > avail_for_title {
                     if avail_for_title > 3 {
                         format!("{}...", &entry.title[..avail_for_title - 3])
@@ -396,7 +419,9 @@ impl NotesList {
                     out,
                     "{}{}{}{}{}{}{}{}{}{}{}",
                     goto(list_start_row + vis_i, start_col),
-                    row_bg, border_fg, "\u{2502}",
+                    row_bg,
+                    border_fg,
+                    "\u{2502}",
                     row_fg,
                     prefix,
                     title_truncated,
@@ -406,11 +431,7 @@ impl NotesList {
                     date_str,
                 );
                 // right border
-                let _ = write!(
-                    out,
-                    "{}{}{}{}",
-                    row_bg, border_fg, "\u{2502}", reset,
-                );
+                let _ = write!(out, "{}{}{}{}", row_bg, border_fg, "\u{2502}", reset,);
             }
         }
 
@@ -420,7 +441,8 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}",
             goto(hint_sep_row, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{251c}",
             "\u{2500}".repeat(inner_width),
             "\u{2524}",
@@ -438,12 +460,15 @@ impl NotesList {
                 out,
                 "{}{}{}{}{}{}{}{}{}{}",
                 goto(hint_row, start_col),
-                bg, border_fg, "\u{2502}",
+                bg,
+                border_fg,
+                "\u{2502}",
                 delete_fg,
                 " ".repeat(msg_left),
                 msg,
                 " ".repeat(msg_right),
-                border_fg, "\u{2502}",
+                border_fg,
+                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         } else {
@@ -460,12 +485,15 @@ impl NotesList {
                 out,
                 "{}{}{}{}{}{}{}{}{}{}",
                 goto(hint_row, start_col),
-                bg, border_fg, "\u{2502}",
+                bg,
+                border_fg,
+                "\u{2502}",
                 hint_fg,
                 " ".repeat(hint_left),
                 hint_display,
                 " ".repeat(hint_right),
-                border_fg, "\u{2502}",
+                border_fg,
+                "\u{2502}",
             );
             let _ = write!(out, "{}", reset);
         }
@@ -475,7 +503,8 @@ impl NotesList {
             out,
             "{}{}{}{}{}{}{}",
             goto(hint_row + 1, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{2570}",
             "\u{2500}".repeat(inner_width),
             "\u{256f}",

@@ -112,29 +112,15 @@ mod tests {
         runtime
             .register_function("add", |_, args: LuaMultiValue| {
                 let mut iter = args.into_iter();
-                let a: i64 = iter
-                    .next()
-                    .unwrap()
-                    .as_integer()
-                    .expect("expected integer");
-                let b: i64 = iter
-                    .next()
-                    .unwrap()
-                    .as_integer()
-                    .expect("expected integer");
+                let a: i64 = iter.next().unwrap().as_integer().expect("expected integer");
+                let b: i64 = iter.next().unwrap().as_integer().expect("expected integer");
                 Ok(LuaMultiValue::from_vec(vec![LuaValue::Integer(a + b)]))
             })
             .expect("register_function failed");
 
-        runtime
-            .exec("sum = maxmux.add(3, 7)")
-            .expect("exec failed");
+        runtime.exec("sum = maxmux.add(3, 7)").expect("exec failed");
 
-        let sum: i64 = runtime
-            .lua
-            .globals()
-            .get("sum")
-            .expect("failed to get sum");
+        let sum: i64 = runtime.lua.globals().get("sum").expect("failed to get sum");
         assert_eq!(sum, 10);
     }
 

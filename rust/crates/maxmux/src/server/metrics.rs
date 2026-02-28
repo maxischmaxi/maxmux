@@ -91,10 +91,8 @@ impl SystemMetricsCollector {
     ///
     /// Returns `None` if no battery is present (e.g. on a desktop).
     pub fn collect_battery(&self) -> Option<BatteryInfo> {
-        let capacity =
-            std::fs::read_to_string("/sys/class/power_supply/BAT0/capacity").ok()?;
-        let status =
-            std::fs::read_to_string("/sys/class/power_supply/BAT0/status").ok()?;
+        let capacity = std::fs::read_to_string("/sys/class/power_supply/BAT0/capacity").ok()?;
+        let status = std::fs::read_to_string("/sys/class/power_supply/BAT0/status").ok()?;
         Some(BatteryInfo {
             level: capacity.trim().parse().ok()?,
             charging: status.trim() == "Charging",
@@ -140,12 +138,7 @@ impl SystemMetricsCollector {
 
         // Ahead/behind relative to upstream (may fail if no upstream is set).
         let ab = Command::new("git")
-            .args([
-                "rev-list",
-                "--left-right",
-                "--count",
-                "HEAD...@{upstream}",
-            ])
+            .args(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
             .current_dir(cwd)
             .output()
             .ok();
@@ -178,7 +171,6 @@ impl Default for SystemMetricsCollector {
         Self::new()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

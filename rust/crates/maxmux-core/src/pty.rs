@@ -6,11 +6,11 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nix::libc;
-use nix::pty::{openpty, Winsize};
+use nix::pty::{Winsize, openpty};
 use nix::sys::signal::{self, Signal};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{self, ForkResult, Pid};
@@ -95,8 +95,8 @@ impl PtyManager {
         let slave_raw: RawFd = slave_fd.as_raw_fd();
 
         // Prepare CStrings for execvp before forking (allocation not safe after fork).
-        let shell_cstr = CString::new(shell)
-            .map_err(|e| PtyError::Open(format!("invalid shell path: {e}")))?;
+        let shell_cstr =
+            CString::new(shell).map_err(|e| PtyError::Open(format!("invalid shell path: {e}")))?;
         let cwd_cstr = cwd
             .map(|p| CString::new(p))
             .transpose()
@@ -125,10 +125,14 @@ impl PtyManager {
                 // Close the original slave and master fds (they are no longer needed).
                 if slave_raw > 2 {
                     // SAFETY: close is async-signal-safe.
-                    unsafe { let _ = libc::close(slave_raw); }
+                    unsafe {
+                        let _ = libc::close(slave_raw);
+                    }
                 }
                 // SAFETY: close is async-signal-safe.
-                unsafe { let _ = libc::close(master_raw); }
+                unsafe {
+                    let _ = libc::close(master_raw);
+                }
 
                 // Change working directory if specified.
                 if let Some(ref dir) = cwd_cstr {
@@ -212,10 +216,7 @@ impl PtyManager {
                 let exit_id = id.clone();
                 let exit_pid = child;
                 tokio::spawn(async move {
-                    let status = tokio::task::spawn_blocking(move || {
-                        waitpid(exit_pid, None)
-                    })
-                    .await;
+                    let status = tokio::task::spawn_blocking(move || waitpid(exit_pid, None)).await;
 
                     let exit_code = match status {
                         Ok(Ok(WaitStatus::Exited(_, code))) => code,
@@ -234,7 +235,10 @@ impl PtyManager {
 
     /// Write bytes to a PTY's master fd.
     pub fn write(&self, id: &PtyId, data: &[u8]) -> Result<usize, PtyError> {
-        let handle = self.ptys.get(id).ok_or_else(|| PtyError::NotFound(id.clone()))?;
+        let handle = self
+            .ptys
+            .get(id)
+            .ok_or_else(|| PtyError::NotFound(id.clone()))?;
         if handle.dead.load(Ordering::Relaxed) {
             return Err(PtyError::NotFound(id.clone()));
         }
@@ -245,7 +249,10 @@ impl PtyManager {
     ///
     /// If the new dimensions match the current ones, this is a no-op.
     pub fn resize(&mut self, id: &PtyId, cols: u16, rows: u16) -> Result<(), PtyError> {
-        let handle = self.ptys.get_mut(id).ok_or_else(|| PtyError::NotFound(id.clone()))?;
+        let handle = self
+            .ptys
+            .get_mut(id)
+            .ok_or_else(|| PtyError::NotFound(id.clone()))?;
         if handle.dead.load(Ordering::Relaxed) {
             return Err(PtyError::NotFound(id.clone()));
         }
@@ -283,7 +290,10 @@ impl PtyManager {
     ///
     /// Sends SIGTERM to the child, marks the handle as dead, and drops the master fd.
     pub fn kill(&mut self, id: &PtyId) -> Result<(), PtyError> {
-        let handle = self.ptys.remove(id).ok_or_else(|| PtyError::NotFound(id.clone()))?;
+        let handle = self
+            .ptys
+            .remove(id)
+            .ok_or_else(|| PtyError::NotFound(id.clone()))?;
         handle.dead.store(true, Ordering::Relaxed);
         let _ = signal::kill(handle.pid, Signal::SIGTERM);
         // master_fd is dropped here, closing the fd.
@@ -319,7 +329,7 @@ impl Default for PtyManager {
 mod tests {
     use super::*;
     use tokio::sync::mpsc;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     fn default_shell() -> String {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
@@ -404,7 +414,8 @@ mod tests {
             .expect("spawn should succeed");
 
         // Resize to same dimensions - should be a no-op (dedup).
-        mgr.resize(&id, 80, 24).expect("resize to same should succeed");
+        mgr.resize(&id, 80, 24)
+            .expect("resize to same should succeed");
 
         // Verify dimensions unchanged.
         let handle = mgr.get(&id).unwrap();
@@ -412,7 +423,8 @@ mod tests {
         assert_eq!(handle.rows, 24);
 
         // Resize to different dimensions.
-        mgr.resize(&id, 120, 40).expect("resize to different should succeed");
+        mgr.resize(&id, 120, 40)
+            .expect("resize to different should succeed");
 
         let handle = mgr.get(&id).unwrap();
         assert_eq!(handle.cols, 120);

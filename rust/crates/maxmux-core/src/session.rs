@@ -113,12 +113,7 @@ impl SessionManager {
         session.windows.iter().find(|w| w.id == window_id)
     }
 
-    pub fn add_pane_to_window(
-        &mut self,
-        session_id: &str,
-        window_id: &str,
-        pane: Pane,
-    ) -> bool {
+    pub fn add_pane_to_window(&mut self, session_id: &str, window_id: &str, pane: Pane) -> bool {
         let session = match self.sessions.get_mut(session_id) {
             Some(s) => s,
             None => return false,
@@ -131,12 +126,7 @@ impl SessionManager {
         true
     }
 
-    pub fn remove_pane(
-        &mut self,
-        session_id: &str,
-        window_id: &str,
-        pane_id: &str,
-    ) -> bool {
+    pub fn remove_pane(&mut self, session_id: &str, window_id: &str, pane_id: &str) -> bool {
         let session = match self.sessions.get_mut(session_id) {
             Some(s) => s,
             None => return false,

@@ -2,7 +2,6 @@
 ///
 /// Provides a centered modal with a text editing area that supports
 /// basic cursor movement, insertion, deletion, and line splitting.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -263,13 +262,13 @@ impl NoteEditor {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);      // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);      // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);            // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);        // #cdd6f4
-    pub const HINT: (u8, u8, u8) = (166, 173, 200);       // #a6adc8 (dim)
-    pub const CURSOR_BG: (u8, u8, u8) = (137, 180, 250);  // #89b4fa
-    pub const CURSOR_FG: (u8, u8, u8) = (30, 30, 46);     // #1e1e2e
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const HINT: (u8, u8, u8) = (166, 173, 200); // #a6adc8 (dim)
+    pub const CURSOR_BG: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const CURSOR_FG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
 }
 
 impl NoteEditor {
@@ -302,28 +301,42 @@ impl NoteEditor {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let hint_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::HINT.0, colors::HINT.1, colors::HINT.2
+            colors::HINT.0,
+            colors::HINT.1,
+            colors::HINT.2
         );
         let cursor_style = format!(
             "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m",
-            colors::CURSOR_BG.0, colors::CURSOR_BG.1, colors::CURSOR_BG.2,
-            colors::CURSOR_FG.0, colors::CURSOR_FG.1, colors::CURSOR_FG.2,
+            colors::CURSOR_BG.0,
+            colors::CURSOR_BG.1,
+            colors::CURSOR_BG.2,
+            colors::CURSOR_FG.0,
+            colors::CURSOR_FG.1,
+            colors::CURSOR_FG.2,
         );
         let reset = "\x1b[0m";
 
@@ -334,7 +347,8 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}",
             goto(start_row, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{256d}",
             "\u{2500}".repeat(inner_width),
             "\u{256e}",
@@ -355,12 +369,15 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}{}{}{}",
             goto(start_row + 1, start_col),
-            bg, border_fg, "\u{2502}",
+            bg,
+            border_fg,
+            "\u{2502}",
             title_fg,
             " ".repeat(title_left_pad),
             title_display,
             " ".repeat(title_right_pad),
-            border_fg, "\u{2502}",
+            border_fg,
+            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -369,7 +386,8 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}",
             goto(start_row + 2, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{251c}",
             "\u{2500}".repeat(inner_width),
             "\u{2524}",
@@ -390,7 +408,9 @@ impl NoteEditor {
                 out,
                 "{}{}{}{}",
                 goto(content_start_row + vis_i, start_col),
-                bg, border_fg, "\u{2502}",
+                bg,
+                border_fg,
+                "\u{2502}",
             );
 
             // Render the line content character by character (for cursor highlight)
@@ -403,9 +423,7 @@ impl NoteEditor {
 
                 // Characters before cursor
                 if cursor_col > 0 && col_written < inner_width {
-                    let before: String = line_chars[..cursor_col.min(inner_width)]
-                        .iter()
-                        .collect();
+                    let before: String = line_chars[..cursor_col.min(inner_width)].iter().collect();
                     let _ = write!(out, "{}{}", text_fg, before);
                     col_written += before.len();
                 }
@@ -425,7 +443,9 @@ impl NoteEditor {
                 // Characters after cursor
                 if cursor_col < line_chars.len() && col_written < inner_width {
                     let after_start = cursor_col + 1;
-                    let after_end = line_chars.len().min(after_start + inner_width - col_written);
+                    let after_end = line_chars
+                        .len()
+                        .min(after_start + inner_width - col_written);
                     let after: String = line_chars[after_start..after_end].iter().collect();
                     let _ = write!(out, "{}", after);
                     col_written += after.len();
@@ -456,7 +476,8 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}",
             goto(hint_sep_row, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{251c}",
             "\u{2500}".repeat(inner_width),
             "\u{2524}",
@@ -477,12 +498,15 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}{}{}{}",
             goto(hint_sep_row + 1, start_col),
-            bg, border_fg, "\u{2502}",
+            bg,
+            border_fg,
+            "\u{2502}",
             hint_fg,
             " ".repeat(hint_left_pad),
             hint_display,
             " ".repeat(hint_right_pad),
-            border_fg, "\u{2502}",
+            border_fg,
+            "\u{2502}",
         );
         let _ = write!(out, "{}", reset);
 
@@ -491,7 +515,8 @@ impl NoteEditor {
             out,
             "{}{}{}{}{}{}{}",
             goto(hint_sep_row + 2, start_col),
-            bg, border_fg,
+            bg,
+            border_fg,
             "\u{2570}",
             "\u{2500}".repeat(inner_width),
             "\u{256f}",

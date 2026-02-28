@@ -2,7 +2,6 @@
 ///
 /// Provides a small centered modal with a text input field,
 /// cursor navigation, and confirm/cancel actions.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -105,13 +104,13 @@ impl RenameDialog {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);      // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);      // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);            // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);        // #cdd6f4
-    pub const CURSOR_BG: (u8, u8, u8) = (205, 214, 244);  // #cdd6f4
-    pub const CURSOR_FG: (u8, u8, u8) = (30, 30, 46);     // #1e1e2e
-    pub const HINT: (u8, u8, u8) = (166, 173, 200);       // #a6adc8
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const CURSOR_BG: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const CURSOR_FG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const HINT: (u8, u8, u8) = (166, 173, 200); // #a6adc8
 }
 
 impl RenameDialog {
@@ -137,28 +136,42 @@ impl RenameDialog {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let cursor_style = format!(
             "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m",
-            colors::CURSOR_BG.0, colors::CURSOR_BG.1, colors::CURSOR_BG.2,
-            colors::CURSOR_FG.0, colors::CURSOR_FG.1, colors::CURSOR_FG.2,
+            colors::CURSOR_BG.0,
+            colors::CURSOR_BG.1,
+            colors::CURSOR_BG.2,
+            colors::CURSOR_FG.0,
+            colors::CURSOR_FG.1,
+            colors::CURSOR_FG.2,
         );
         let hint_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::HINT.0, colors::HINT.1, colors::HINT.2
+            colors::HINT.0,
+            colors::HINT.1,
+            colors::HINT.2
         );
         let reset = "\x1b[0m";
 

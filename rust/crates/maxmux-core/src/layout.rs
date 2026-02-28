@@ -36,8 +36,7 @@ pub fn calculate_layout(node: &LayoutNode, bounds: Rect) -> HashMap<PaneId, Rect
             let (first_bounds, second_bounds) = match direction {
                 SplitDirection::Horizontal => {
                     // Split left | right
-                    let split_x =
-                        bounds.x as f64 + bounds.width as f64 * ratio;
+                    let split_x = bounds.x as f64 + bounds.width as f64 * ratio;
                     let split_x = split_x.floor() as u16;
                     let first = Rect {
                         x: bounds.x,
@@ -55,8 +54,7 @@ pub fn calculate_layout(node: &LayoutNode, bounds: Rect) -> HashMap<PaneId, Rect
                 }
                 SplitDirection::Vertical => {
                     // Split top / bottom
-                    let split_y =
-                        bounds.y as f64 + bounds.height as f64 * ratio;
+                    let split_y = bounds.y as f64 + bounds.height as f64 * ratio;
                     let split_y = split_y.floor() as u16;
                     let first = Rect {
                         x: bounds.x,
@@ -306,9 +304,7 @@ mod tests {
     use crate::session::{LayoutNode, SplitDirection};
 
     fn leaf(id: &str) -> LayoutNode {
-        LayoutNode::Leaf {
-            pane_id: id.into(),
-        }
+        LayoutNode::Leaf { pane_id: id.into() }
     }
     fn hsplit(ratio: f64, first: LayoutNode, second: LayoutNode) -> LayoutNode {
         LayoutNode::Split {
@@ -413,12 +409,8 @@ mod tests {
             } => {
                 assert!(matches!(direction, SplitDirection::Horizontal));
                 assert_eq!(*ratio, 0.5);
-                assert!(
-                    matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1")
-                );
-                assert!(
-                    matches!(&children.1, LayoutNode::Leaf { pane_id } if pane_id == "p2")
-                );
+                assert!(matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1"));
+                assert!(matches!(&children.1, LayoutNode::Leaf { pane_id } if pane_id == "p2"));
             }
             _ => panic!("Expected Split"),
         }
@@ -581,9 +573,7 @@ mod tests {
         match &result {
             LayoutNode::Split { children, .. } => {
                 // First child should still be p1
-                assert!(
-                    matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1")
-                );
+                assert!(matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1"));
                 // Second child should be a split of p2 and p3
                 match &children.1 {
                     LayoutNode::Split {
@@ -623,12 +613,8 @@ mod tests {
         // Should collapse to hsplit(p1, p3)
         match &result {
             LayoutNode::Split { children, .. } => {
-                assert!(
-                    matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1")
-                );
-                assert!(
-                    matches!(&children.1, LayoutNode::Leaf { pane_id } if pane_id == "p3")
-                );
+                assert!(matches!(&children.0, LayoutNode::Leaf { pane_id } if pane_id == "p1"));
+                assert!(matches!(&children.1, LayoutNode::Leaf { pane_id } if pane_id == "p3"));
             }
             _ => panic!("Expected Split"),
         }

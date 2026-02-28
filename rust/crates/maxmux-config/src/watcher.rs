@@ -112,29 +112,33 @@ impl ConfigWatcher {
         });
 
         // Create the notify watcher that feeds raw events.
-        let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            let event = match res {
-                Ok(e) => e,
-                Err(e) => {
-                    tracing::warn!("file watcher error: {e}");
+        let mut watcher =
+            notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+                let event = match res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        tracing::warn!("file watcher error: {e}");
+                        return;
+                    }
+                };
+
+                // Only care about modifications, creations, and removals.
+                match event.kind {
+                    EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => {}
+                    _ => return,
+                }
+
+                // Check if any of the affected paths match our config file.
+                let dominated = event
+                    .paths
+                    .iter()
+                    .any(|p| normalize_path(p) == config_path_canon);
+                if !dominated {
                     return;
                 }
-            };
 
-            // Only care about modifications, creations, and removals.
-            match event.kind {
-                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_) => {}
-                _ => return,
-            }
-
-            // Check if any of the affected paths match our config file.
-            let dominated = event.paths.iter().any(|p| normalize_path(p) == config_path_canon);
-            if !dominated {
-                return;
-            }
-
-            let _ = raw_tx.send(());
-        })?;
+                let _ = raw_tx.send(());
+            })?;
 
         watcher.watch(&watch_dir, RecursiveMode::NonRecursive)?;
 

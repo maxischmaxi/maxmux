@@ -115,9 +115,7 @@ fn is_adjacent_to_active(
             return true;
         }
         // Immediately to the right
-        if bx.saturating_add(1) == rect.x
-            && by >= rect.y
-            && by < rect.y.saturating_add(rect.height)
+        if bx.saturating_add(1) == rect.x && by >= rect.y && by < rect.y.saturating_add(rect.height)
         {
             return true;
         }
@@ -129,9 +127,7 @@ fn is_adjacent_to_active(
             return true;
         }
         // Immediately below
-        if by.saturating_add(1) == rect.y
-            && bx >= rect.x
-            && bx < rect.x.saturating_add(rect.width)
+        if by.saturating_add(1) == rect.y && bx >= rect.x && bx < rect.x.saturating_add(rect.width)
         {
             return true;
         }
@@ -253,7 +249,7 @@ pub fn render_borders(
 mod tests {
     use super::*;
     use crate::screen::ScreenBuffer;
-    use maxmux_core::layout::{calculate_layout, Rect};
+    use maxmux_core::layout::{Rect, calculate_layout};
     use maxmux_core::session::{LayoutNode, SplitDirection};
 
     #[test]

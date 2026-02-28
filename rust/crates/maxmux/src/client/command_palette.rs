@@ -2,7 +2,6 @@
 ///
 /// Provides a centered modal dialog where users can type a query to
 /// filter through available commands and execute the selected one.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -91,8 +90,7 @@ impl CommandPalette {
                 if query_lower.is_empty() {
                     return true;
                 }
-                let haystack =
-                    format!("{} {}", entry.id, entry.description).to_lowercase();
+                let haystack = format!("{} {}", entry.id, entry.description).to_lowercase();
                 haystack.contains(&query_lower)
             })
             .map(|(i, _)| i)
@@ -125,14 +123,14 @@ impl CommandPalette {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);     // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);     // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);           // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);       // #cdd6f4
-    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68);  // #313244
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68); // #313244
     pub const SELECTED_FG: (u8, u8, u8) = (137, 180, 250); // #89b4fa
-    pub const CMD_ID: (u8, u8, u8) = (203, 166, 247);    // #cba6f7 (purple)
-    pub const DESC: (u8, u8, u8) = (166, 173, 200);      // #a6adc8 (dim)
+    pub const CMD_ID: (u8, u8, u8) = (203, 166, 247); // #cba6f7 (purple)
+    pub const DESC: (u8, u8, u8) = (166, 173, 200); // #a6adc8 (dim)
 }
 
 impl CommandPalette {
@@ -165,35 +163,51 @@ impl CommandPalette {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let sel_bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::SELECTED_BG.0, colors::SELECTED_BG.1, colors::SELECTED_BG.2
+            colors::SELECTED_BG.0,
+            colors::SELECTED_BG.1,
+            colors::SELECTED_BG.2
         );
         let sel_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::SELECTED_FG.0, colors::SELECTED_FG.1, colors::SELECTED_FG.2
+            colors::SELECTED_FG.0,
+            colors::SELECTED_FG.1,
+            colors::SELECTED_FG.2
         );
         let cmd_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::CMD_ID.0, colors::CMD_ID.1, colors::CMD_ID.2
+            colors::CMD_ID.0,
+            colors::CMD_ID.1,
+            colors::CMD_ID.2
         );
         let desc_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::DESC.0, colors::DESC.1, colors::DESC.2
+            colors::DESC.0,
+            colors::DESC.1,
+            colors::DESC.2
         );
         let reset = "\x1b[0m";
 
@@ -232,15 +246,7 @@ impl CommandPalette {
             reset,
         );
         // right border
-        let _ = write!(
-            out,
-            "{}{}{}{}{}",
-            bg,
-            border_fg,
-            "\u{2502}",
-            reset,
-            "",
-        );
+        let _ = write!(out, "{}{}{}{}{}", bg, border_fg, "\u{2502}", reset, "",);
 
         // -- query line: "> {query}_" ----------------------------------------
         let cursor_char = "_";
@@ -303,12 +309,7 @@ impl CommandPalette {
                 reset,
             );
         } else {
-            for (vis_i, &cmd_idx) in self
-                .filtered
-                .iter()
-                .take(max_visible_items)
-                .enumerate()
-            {
+            for (vis_i, &cmd_idx) in self.filtered.iter().take(max_visible_items).enumerate() {
                 let entry = &self.commands[cmd_idx];
                 let is_selected = vis_i == self.selected_index;
 
@@ -322,8 +323,7 @@ impl CommandPalette {
                 let prefix_len = prefix.len();
                 let id_len = entry.id.len();
                 let spacer_len = spacer.len();
-                let avail_for_desc =
-                    inner_width.saturating_sub(prefix_len + id_len + spacer_len);
+                let avail_for_desc = inner_width.saturating_sub(prefix_len + id_len + spacer_len);
                 let desc_truncated: String = if entry.description.len() > avail_for_desc {
                     entry.description[..avail_for_desc].to_string()
                 } else {
@@ -349,14 +349,7 @@ impl CommandPalette {
                     reset,
                 );
                 // right border
-                let _ = write!(
-                    out,
-                    "{}{}{}{}",
-                    row_bg,
-                    border_fg,
-                    "\u{2502}",
-                    reset,
-                );
+                let _ = write!(out, "{}{}{}{}", row_bg, border_fg, "\u{2502}", reset,);
             }
         }
 

@@ -4,11 +4,11 @@ use crate::mouse;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputAction {
-    Passthrough(Vec<u8>),      // Forward raw bytes to PTY
-    Command(String),           // Execute a command
-    PrefixActivated,           // Entered prefix mode
-    PrefixTimeout,             // Prefix mode timed out
-    Mouse(mouse::MouseEvent),  // Mouse event to handle
+    Passthrough(Vec<u8>),     // Forward raw bytes to PTY
+    Command(String),          // Execute a command
+    PrefixActivated,          // Entered prefix mode
+    PrefixTimeout,            // Prefix mode timed out
+    Mouse(mouse::MouseEvent), // Mouse event to handle
 }
 
 pub struct InputRouter {
@@ -46,11 +46,7 @@ impl InputRouter {
     ///    Parse key, check global_bindings
     ///    If found: return Command
     ///    Else: return Passthrough
-    pub fn handle_input(
-        &mut self,
-        data: &[u8],
-        current_process: Option<&str>,
-    ) -> Vec<InputAction> {
+    pub fn handle_input(&mut self, data: &[u8], current_process: Option<&str>) -> Vec<InputAction> {
         let mut actions = Vec::new();
         let mut offset = 0;
 
@@ -153,9 +149,7 @@ mod tests {
             .bind("c".into(), "window:create".into(), vec![]);
         router.handle_input(&[0x01], None); // Enter prefix
         let actions = router.handle_input(b"c", None);
-        assert!(
-            matches!(&actions[0], InputAction::Command(cmd) if cmd == "window:create")
-        );
+        assert!(matches!(&actions[0], InputAction::Command(cmd) if cmd == "window:create"));
         assert!(!router.is_in_prefix_mode());
     }
 
@@ -166,9 +160,7 @@ mod tests {
             .global_bindings_mut()
             .bind("C-h".into(), "pane:focus-left".into(), vec![]);
         let actions = router.handle_input(&[0x08], None); // Ctrl+h = 0x08
-        assert!(
-            matches!(&actions[0], InputAction::Command(cmd) if cmd == "pane:focus-left")
-        );
+        assert!(matches!(&actions[0], InputAction::Command(cmd) if cmd == "pane:focus-left"));
     }
 
     #[test]
@@ -176,18 +168,18 @@ mod tests {
         let mut router = InputRouter::new("C-a", 0);
         let actions = router.handle_input(b"hello", None);
         // Should be passthrough for each character
-        assert!(actions
-            .iter()
-            .all(|a| matches!(a, InputAction::Passthrough(_))));
+        assert!(
+            actions
+                .iter()
+                .all(|a| matches!(a, InputAction::Passthrough(_)))
+        );
     }
 
     #[test]
     fn test_mouse_event() {
         let mut router = InputRouter::new("C-a", 0);
         let actions = router.handle_input(b"\x1b[<0;10;5M", None);
-        assert!(
-            matches!(&actions[0], InputAction::Mouse(ev) if ev.x == 9 && ev.y == 4)
-        );
+        assert!(matches!(&actions[0], InputAction::Mouse(ev) if ev.x == 9 && ev.y == 4));
     }
 
     #[test]
@@ -227,9 +219,7 @@ mod tests {
         let actions = router.handle_input(&[0x01, b'c'], None);
         assert_eq!(actions.len(), 2);
         assert!(matches!(&actions[0], InputAction::PrefixActivated));
-        assert!(
-            matches!(&actions[1], InputAction::Command(cmd) if cmd == "window:create")
-        );
+        assert!(matches!(&actions[1], InputAction::Command(cmd) if cmd == "window:create"));
         assert!(!router.is_in_prefix_mode());
     }
 
@@ -246,8 +236,6 @@ mod tests {
         assert!(matches!(&actions[0], InputAction::Passthrough(_)));
         // Should trigger when bash is running
         let actions = router.handle_input(&[0x08], Some("bash"));
-        assert!(
-            matches!(&actions[0], InputAction::Command(cmd) if cmd == "pane:focus-left")
-        );
+        assert!(matches!(&actions[0], InputAction::Command(cmd) if cmd == "pane:focus-left"));
     }
 }

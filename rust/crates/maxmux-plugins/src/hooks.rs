@@ -77,10 +77,7 @@ impl HookRegistry {
     /// Check whether any handlers (fire-and-forget or waterfall) are registered
     /// for the given event.
     pub fn has_handlers(&self, event: &str) -> bool {
-        let has_regular = self
-            .handlers
-            .get(event)
-            .is_some_and(|h| !h.is_empty());
+        let has_regular = self.handlers.get(event).is_some_and(|h| !h.is_empty());
         let has_waterfall = self
             .waterfall_handlers
             .get(event)

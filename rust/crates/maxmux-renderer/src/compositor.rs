@@ -441,8 +441,7 @@ mod tests {
         };
 
         // Zoom p1 - should fill entire screen
-        let (_, cursor) =
-            comp.compose(&terminals, &rects, "p1", None, &border_config, Some("p1"));
+        let (_, cursor) = comp.compose(&terminals, &rects, "p1", None, &border_config, Some("p1"));
         let c = cursor.unwrap();
         // Zoomed cursor at (6, 0) since "Pane 1" is 6 chars
         assert_eq!(c.x, 6);

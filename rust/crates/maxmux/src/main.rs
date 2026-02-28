@@ -183,10 +183,7 @@ async fn handle_remote_command(cmd: &Commands) {
                 eprintln!("select-pane requires a direction flag: -L, -R, -U, or -D");
                 return;
             };
-            (
-                "select-pane".to_string(),
-                Some(vec![direction.to_string()]),
-            )
+            ("select-pane".to_string(), Some(vec![direction.to_string()]))
         }
         Commands::NewWindow => ("new-window".to_string(), None),
         Commands::SelectWindow { target } => {

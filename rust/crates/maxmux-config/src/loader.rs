@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::schema::{default_keybindings, MaxmuxConfig};
+use crate::schema::{MaxmuxConfig, default_keybindings};
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -72,11 +72,10 @@ pub fn load_config_from_path(path: &Path) -> Result<MaxmuxConfig, ConfigLoadErro
 ///
 /// This is the core parsing function, also useful for testing.
 pub fn load_config_from_str(content: &str, path: &Path) -> Result<MaxmuxConfig, ConfigLoadError> {
-    let mut config: MaxmuxConfig =
-        toml::from_str(content).map_err(|e| ConfigLoadError::Parse {
-            path: path.to_path_buf(),
-            source: e,
-        })?;
+    let mut config: MaxmuxConfig = toml::from_str(content).map_err(|e| ConfigLoadError::Parse {
+        path: path.to_path_buf(),
+        source: e,
+    })?;
 
     // Merge keybindings: defaults first, then overlay user bindings.
     // If the TOML file specified keybindings, serde replaced the whole field

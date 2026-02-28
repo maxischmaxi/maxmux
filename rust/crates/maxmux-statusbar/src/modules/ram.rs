@@ -1,4 +1,4 @@
-use crate::modules::{config_bool, ModuleContext, StatusBarModule};
+use crate::modules::{ModuleContext, StatusBarModule, config_bool};
 use crate::types::Segment;
 
 pub struct RamModule;

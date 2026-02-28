@@ -1,4 +1,4 @@
-use crate::modules::{config_bool, ModuleContext, StatusBarModule};
+use crate::modules::{ModuleContext, StatusBarModule, config_bool};
 use crate::types::{ColorPair, Segment};
 
 pub struct CpuModule;
@@ -19,11 +19,7 @@ fn bar_graph(usage: f64) -> String {
     let filled = ((usage / 100.0) * 5.0).round() as usize;
     let filled = filled.min(5);
     let empty = 5 - filled;
-    format!(
-        "{}{}",
-        "\u{2593}".repeat(filled),
-        "\u{2591}".repeat(empty)
-    )
+    format!("{}{}", "\u{2593}".repeat(filled), "\u{2591}".repeat(empty))
 }
 
 impl StatusBarModule for CpuModule {

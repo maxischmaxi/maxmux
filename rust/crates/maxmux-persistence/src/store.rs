@@ -171,7 +171,12 @@ mod tests {
     #[test]
     fn save_creates_parent_directories() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("a").join("b").join("c").join("sessions.json");
+        let path = dir
+            .path()
+            .join("a")
+            .join("b")
+            .join("c")
+            .join("sessions.json");
         let store = SessionStore::new(path.clone());
 
         store.save(&[sample_session("deep")]).unwrap();
@@ -229,7 +234,11 @@ mod tests {
         assert_eq!(store.load().unwrap().len(), 1);
 
         store
-            .save(&[sample_session("a"), sample_session("b"), sample_session("c")])
+            .save(&[
+                sample_session("a"),
+                sample_session("b"),
+                sample_session("c"),
+            ])
             .unwrap();
         let loaded = store.load().unwrap();
         assert_eq!(loaded.len(), 3);

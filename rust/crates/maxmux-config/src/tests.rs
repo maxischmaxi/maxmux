@@ -5,8 +5,8 @@ mod tests {
 
     use crate::loader::load_config_from_str;
     use crate::schema::{
-        default_keybindings, BorderStyle, KeybindingValue, LineStyle, MaxmuxConfig, Position,
-        SeparatorStyle, SessionListMode,
+        BorderStyle, KeybindingValue, LineStyle, MaxmuxConfig, Position, SeparatorStyle,
+        SessionListMode, default_keybindings,
     };
 
     // Convenience: parse a TOML string through the loader pipeline.
@@ -134,10 +134,7 @@ unless = ["vim", "nvim"]
     // -----------------------------------------------------------------------
     #[test]
     fn invalid_history_limit_rejected() {
-        let result = load_config_from_str(
-            r#"history_limit = 200000"#,
-            Path::new("<test>"),
-        );
+        let result = load_config_from_str(r#"history_limit = 200000"#, Path::new("<test>"));
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
@@ -416,10 +413,7 @@ enabled = true
 
         let dt = cfg.status_bar.modules.get("datetime").unwrap();
         let table = dt.as_table().unwrap();
-        assert_eq!(
-            table.get("format").unwrap().as_str().unwrap(),
-            "%H:%M"
-        );
+        assert_eq!(table.get("format").unwrap().as_str().unwrap(), "%H:%M");
     }
 
     // -----------------------------------------------------------------------

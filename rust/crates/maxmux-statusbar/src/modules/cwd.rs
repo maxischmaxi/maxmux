@@ -1,4 +1,4 @@
-use crate::modules::{config_int, ModuleContext, StatusBarModule};
+use crate::modules::{ModuleContext, StatusBarModule, config_int};
 use crate::types::Segment;
 
 pub struct CwdModule;

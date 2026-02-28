@@ -3,14 +3,12 @@ use std::sync::Arc;
 
 use base64::Engine;
 use tokio::net::UnixStream;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 use maxmux_core::command::CommandRegistry;
 use maxmux_core::layout::{self, Rect, calculate_layout};
 use maxmux_core::pty::{PtyId, PtyManager};
-use maxmux_core::session::{
-    LayoutNode, Pane, PaneId, SessionManager, SplitDirection, Window,
-};
+use maxmux_core::session::{LayoutNode, Pane, PaneId, SessionManager, SplitDirection, Window};
 use maxmux_core::terminal::TerminalManager;
 use maxmux_ipc::protocol::*;
 use maxmux_ipc::transport::SplitConnection;
@@ -76,7 +74,8 @@ impl ServerState {
         cwd: Option<&str>,
     ) -> Result<(), String> {
         // 1. Create VirtualTerminal
-        self.terminals.create(pane_id.to_string(), cols, rows, 10_000);
+        self.terminals
+            .create(pane_id.to_string(), cols, rows, 10_000);
 
         // 2. Spawn PTY (PtyManager generates its own ID)
         let pty_id = self
@@ -92,14 +91,11 @@ impl ServerState {
             .map_err(|e| e.to_string())?;
 
         // 3. Map PTY ID <-> pane ID
-        self.pty_to_pane
-            .insert(pty_id.clone(), pane_id.to_string());
-        self.pane_to_pty
-            .insert(pane_id.to_string(), pty_id);
+        self.pty_to_pane.insert(pty_id.clone(), pane_id.to_string());
+        self.pane_to_pty.insert(pane_id.to_string(), pty_id);
 
         // 4. Initialize output buffer
-        self.output_buffers
-            .insert(pane_id.to_string(), Vec::new());
+        self.output_buffers.insert(pane_id.to_string(), Vec::new());
 
         Ok(())
     }
@@ -285,9 +281,7 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
         }
         ClientMessage::Input { pane_id, data } => {
             // Base64 decode and write to PTY
-            if let Ok(bytes) =
-                base64::engine::general_purpose::STANDARD.decode(&data)
-            {
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&data) {
                 let _ = state.write_to_pane(&pane_id, &bytes);
             }
         }
@@ -303,8 +297,11 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                 // Handle built-in commands directly
                 match id.as_str() {
                     "window:create" => {
-                        let (cols, rows) =
-                            state.client_sizes.get(client_id).copied().unwrap_or((80, 24));
+                        let (cols, rows) = state
+                            .client_sizes
+                            .get(client_id)
+                            .copied()
+                            .unwrap_or((80, 24));
                         let cwd = state.client_cwds.get(client_id).cloned();
                         handle_window_create(
                             client_id,
@@ -316,12 +313,7 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                         );
                     }
                     "window:next" | "window:previous" => {
-                        handle_window_switch(
-                            client_id,
-                            &session_id,
-                            id == "window:next",
-                            state,
-                        );
+                        handle_window_switch(client_id, &session_id, id == "window:next", state);
                     }
                     "window:close" => {
                         handle_window_close(client_id, &session_id, state);
@@ -332,8 +324,11 @@ fn handle_message(client_id: &str, msg: ClientMessage, state: &mut ServerState) 
                         } else {
                             SplitDirection::Vertical
                         };
-                        let (cols, rows) =
-                            state.client_sizes.get(client_id).copied().unwrap_or((80, 24));
+                        let (cols, rows) = state
+                            .client_sizes
+                            .get(client_id)
+                            .copied()
+                            .unwrap_or((80, 24));
                         handle_split(client_id, &session_id, dir, cols, rows, state);
                     }
                     "pane:focus-up" | "pane:focus-down" | "pane:focus-left"
@@ -429,7 +424,11 @@ fn handle_attach(
 
 fn replay_output_buffers(client_id: &str, session_id: &str, state: &ServerState) {
     let pane_ids: Vec<String> = if let Some(session) = state.sessions.get(session_id) {
-        if let Some(window) = session.windows.iter().find(|w| w.id == session.active_window) {
+        if let Some(window) = session
+            .windows
+            .iter()
+            .find(|w| w.id == session.active_window)
+        {
             window.panes.iter().map(|p| p.id.clone()).collect()
         } else {
             vec![]
@@ -510,10 +509,9 @@ fn handle_window_create(
     };
 
     state.sessions.add_window(session_id, window);
-    state.pane_to_window.insert(
-        pane_id.clone(),
-        (session_id.to_string(), window_id.clone()),
-    );
+    state
+        .pane_to_window
+        .insert(pane_id.clone(), (session_id.to_string(), window_id.clone()));
 
     // Switch to new window
     if let Some(session) = state.sessions.get_mut(session_id) {
@@ -550,8 +548,7 @@ fn handle_split(
             .find(|w| w.id == session.active_window)
         {
             let target = window.active_pane.clone();
-            window.layout =
-                layout::split_layout(&window.layout, &target, &new_pane_id, direction);
+            window.layout = layout::split_layout(&window.layout, &target, &new_pane_id, direction);
 
             cwd_for_new_pane = window
                 .panes
@@ -577,10 +574,9 @@ fn handle_split(
         return;
     }
 
-    state.pane_to_window.insert(
-        new_pane_id.clone(),
-        (session_id.to_string(), window_id),
-    );
+    state
+        .pane_to_window
+        .insert(new_pane_id.clone(), (session_id.to_string(), window_id));
 
     // Calculate layout and spawn pane at correct size
     let status_bar_rows = 1u16;
@@ -669,12 +665,7 @@ fn handle_focus(
     send_layout_to_client(client_id, session_id, cols, rows, state);
 }
 
-fn handle_window_switch(
-    client_id: &str,
-    session_id: &str,
-    next: bool,
-    state: &mut ServerState,
-) {
+fn handle_window_switch(client_id: &str, session_id: &str, next: bool, state: &mut ServerState) {
     let (cols, rows) = state
         .client_sizes
         .get(client_id)
@@ -765,16 +756,16 @@ fn handle_pane_close(client_id: &str, session_id: &str, state: &mut ServerState)
         .unwrap_or((80, 24));
 
     // Collect needed information before mutating
-    let close_info: Option<(String, String)> =
-        if let Some(session) = state.sessions.get(session_id) {
-            session
-                .windows
-                .iter()
-                .find(|w| w.id == session.active_window)
-                .map(|window| (window.active_pane.clone(), window.id.clone()))
-        } else {
-            None
-        };
+    let close_info: Option<(String, String)> = if let Some(session) = state.sessions.get(session_id)
+    {
+        session
+            .windows
+            .iter()
+            .find(|w| w.id == session.active_window)
+            .map(|window| (window.active_pane.clone(), window.id.clone()))
+    } else {
+        None
+    };
 
     if let Some((pane_id, window_id)) = close_info {
         // Kill PTY

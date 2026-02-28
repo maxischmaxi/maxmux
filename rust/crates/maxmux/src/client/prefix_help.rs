@@ -2,7 +2,6 @@
 ///
 /// Renders a centered modal listing all registered prefix bindings
 /// with their human-readable descriptions and translated key names.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -127,10 +126,10 @@ fn describe_command(cmd: &str) -> &str {
 
 fn translate_key_display(key: &str) -> String {
     match key {
-        "Up" => "\u{2191}".to_string(),      // ↑
-        "Down" => "\u{2193}".to_string(),    // ↓
-        "Left" => "\u{2190}".to_string(),    // ←
-        "Right" => "\u{2192}".to_string(),   // →
+        "Up" => "\u{2191}".to_string(),    // ↑
+        "Down" => "\u{2193}".to_string(),  // ↓
+        "Left" => "\u{2190}".to_string(),  // ←
+        "Right" => "\u{2192}".to_string(), // →
         other => other.to_string(),
     }
 }
@@ -141,12 +140,12 @@ fn translate_key_display(key: &str) -> String {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);      // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);      // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);            // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);        // #cdd6f4
-    pub const KEY_FG: (u8, u8, u8) = (137, 180, 250);     // #89b4fa (blue/bold)
-    pub const HINT: (u8, u8, u8) = (166, 173, 200);       // #a6adc8 (dim)
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const KEY_FG: (u8, u8, u8) = (137, 180, 250); // #89b4fa (blue/bold)
+    pub const HINT: (u8, u8, u8) = (166, 173, 200); // #a6adc8 (dim)
 }
 
 impl PrefixHelp {
@@ -185,27 +184,39 @@ impl PrefixHelp {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let key_fg = format!(
             "\x1b[38;2;{};{};{}m\x1b[1m",
-            colors::KEY_FG.0, colors::KEY_FG.1, colors::KEY_FG.2
+            colors::KEY_FG.0,
+            colors::KEY_FG.1,
+            colors::KEY_FG.2
         );
         let hint_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::HINT.0, colors::HINT.1, colors::HINT.2
+            colors::HINT.0,
+            colors::HINT.1,
+            colors::HINT.2
         );
         let reset = "\x1b[0m";
 
@@ -300,8 +311,7 @@ impl PrefixHelp {
                 } else {
                     desc.clone()
                 };
-                let trailing_pad =
-                    inner_width.saturating_sub(prefix_len + desc_truncated.len());
+                let trailing_pad = inner_width.saturating_sub(prefix_len + desc_truncated.len());
 
                 let _ = write!(
                     out,

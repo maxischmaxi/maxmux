@@ -3,7 +3,6 @@
 ///
 /// Can be positioned on the left or right side of the terminal.
 /// Supports keyboard navigation and session switching.
-
 use std::fmt::Write as FmtWrite;
 
 // ---------------------------------------------------------------------------
@@ -119,16 +118,16 @@ impl SessionSidebar {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);       // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);       // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);             // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);         // #cdd6f4
-    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68);    // #313244
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68); // #313244
     pub const SELECTED_FG: (u8, u8, u8) = (137, 180, 250); // #89b4fa
-    pub const ACTIVE: (u8, u8, u8) = (166, 227, 161);      // #a6e3a1 (green)
-    pub const ATTACHED: (u8, u8, u8) = (250, 179, 135);    // #fab387 (peach)
-    pub const HINT: (u8, u8, u8) = (166, 173, 200);        // #a6adc8
-    pub const WINDOW_FG: (u8, u8, u8) = (166, 173, 200);   // #a6adc8 (dim)
+    pub const ACTIVE: (u8, u8, u8) = (166, 227, 161); // #a6e3a1 (green)
+    pub const ATTACHED: (u8, u8, u8) = (250, 179, 135); // #fab387 (peach)
+    pub const HINT: (u8, u8, u8) = (166, 173, 200); // #a6adc8
+    pub const WINDOW_FG: (u8, u8, u8) = (166, 173, 200); // #a6adc8 (dim)
 }
 
 impl SessionSidebar {
@@ -160,43 +159,63 @@ impl SessionSidebar {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m\x1b[1m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let sel_bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::SELECTED_BG.0, colors::SELECTED_BG.1, colors::SELECTED_BG.2
+            colors::SELECTED_BG.0,
+            colors::SELECTED_BG.1,
+            colors::SELECTED_BG.2
         );
         let sel_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::SELECTED_FG.0, colors::SELECTED_FG.1, colors::SELECTED_FG.2
+            colors::SELECTED_FG.0,
+            colors::SELECTED_FG.1,
+            colors::SELECTED_FG.2
         );
         let active_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::ACTIVE.0, colors::ACTIVE.1, colors::ACTIVE.2
+            colors::ACTIVE.0,
+            colors::ACTIVE.1,
+            colors::ACTIVE.2
         );
         let attached_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::ATTACHED.0, colors::ATTACHED.1, colors::ATTACHED.2
+            colors::ATTACHED.0,
+            colors::ATTACHED.1,
+            colors::ATTACHED.2
         );
         let hint_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::HINT.0, colors::HINT.1, colors::HINT.2
+            colors::HINT.0,
+            colors::HINT.1,
+            colors::HINT.2
         );
         let window_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::WINDOW_FG.0, colors::WINDOW_FG.1, colors::WINDOW_FG.2
+            colors::WINDOW_FG.0,
+            colors::WINDOW_FG.1,
+            colors::WINDOW_FG.2
         );
         let reset = "\x1b[0m";
 
@@ -263,8 +282,7 @@ impl SessionSidebar {
             } else {
                 session.name.clone()
             };
-            let content_len =
-                prefix.chars().count() + name_display.len() + markers.chars().count();
+            let content_len = prefix.chars().count() + name_display.len() + markers.chars().count();
             let trailing_pad = inner_width.saturating_sub(content_len);
 
             let _ = write!(

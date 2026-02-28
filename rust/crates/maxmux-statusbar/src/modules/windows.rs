@@ -1,4 +1,4 @@
-use crate::modules::{config_str, ModuleContext, StatusBarModule};
+use crate::modules::{ModuleContext, StatusBarModule, config_str};
 use crate::types::Segment;
 
 pub struct WindowsModule;

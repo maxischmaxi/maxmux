@@ -42,11 +42,7 @@ impl ProcessTracker {
         let fields: Vec<&str> = rest.split_whitespace().collect();
         // fields[0] = state (index 2), fields[5] = tpgid (index 7)
         let tpgid: i32 = fields.get(5)?.parse().ok()?;
-        if tpgid > 0 {
-            Some(tpgid as u32)
-        } else {
-            None
-        }
+        if tpgid > 0 { Some(tpgid as u32) } else { None }
     }
 
     /// Get child PIDs of a process by reading `/proc/<pid>/task/<tid>/children`.

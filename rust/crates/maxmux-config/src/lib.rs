@@ -1,5 +1,5 @@
-pub mod schema;
 pub mod loader;
+pub mod schema;
 pub mod watcher;
 
 #[cfg(test)]
@@ -12,6 +12,6 @@ pub use schema::{
     StatusBarConfig, StatusBarThemeColors, ThemeConfig,
 };
 
-pub use loader::{find_config_file, load_config, load_config_from_path, ConfigLoadError};
+pub use loader::{ConfigLoadError, find_config_file, load_config, load_config_from_path};
 
 pub use watcher::{ConfigWatchError, ConfigWatcher};

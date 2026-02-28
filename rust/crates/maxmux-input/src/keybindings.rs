@@ -20,13 +20,7 @@ impl KeybindingRegistry {
     /// Bind a key to a command with optional "unless" conditions.
     /// The "unless" list contains process names that should block this binding.
     pub fn bind(&mut self, key: String, command_id: String, unless: Vec<String>) {
-        self.bindings.insert(
-            key,
-            Keybinding {
-                command_id,
-                unless,
-            },
-        );
+        self.bindings.insert(key, Keybinding { command_id, unless });
     }
 
     /// Resolve a key to its command, respecting "unless" conditions.
@@ -81,16 +75,9 @@ mod tests {
     #[test]
     fn test_unless_blocks() {
         let mut reg = KeybindingRegistry::new();
-        reg.bind(
-            "C-l".into(),
-            "pane:focus-right".into(),
-            vec!["vim".into()],
-        );
+        reg.bind("C-l".into(), "pane:focus-right".into(), vec!["vim".into()]);
         assert_eq!(reg.resolve("C-l", Some("vim")), None);
-        assert_eq!(
-            reg.resolve("C-l", Some("bash")),
-            Some("pane:focus-right")
-        );
+        assert_eq!(reg.resolve("C-l", Some("bash")), Some("pane:focus-right"));
     }
 
     #[test]
@@ -128,11 +115,7 @@ mod tests {
     #[test]
     fn test_unless_no_process() {
         let mut reg = KeybindingRegistry::new();
-        reg.bind(
-            "C-l".into(),
-            "pane:focus-right".into(),
-            vec!["vim".into()],
-        );
+        reg.bind("C-l".into(), "pane:focus-right".into(), vec!["vim".into()]);
         // No current process, should still resolve
         assert_eq!(reg.resolve("C-l", None), Some("pane:focus-right"));
     }

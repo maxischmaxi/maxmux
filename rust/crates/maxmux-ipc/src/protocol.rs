@@ -74,9 +74,7 @@ pub enum ServerMessage {
     #[serde(rename = "metrics")]
     Metrics { data: MetricsData },
     #[serde(rename = "cursor-state")]
-    CursorState {
-        panes: HashMap<String, CursorInfo>,
-    },
+    CursorState { panes: HashMap<String, CursorInfo> },
     #[serde(rename = "process-info")]
     ProcessInfo {
         panes: HashMap<String, String>,
@@ -167,9 +165,7 @@ mod tests {
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"type\":\"attach\""));
         let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
-        assert!(
-            matches!(parsed, ClientMessage::Attach { session_id: Some(s), .. } if s == "s1")
-        );
+        assert!(matches!(parsed, ClientMessage::Attach { session_id: Some(s), .. } if s == "s1"));
     }
 
     #[test]

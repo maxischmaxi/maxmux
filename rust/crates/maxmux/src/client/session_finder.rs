@@ -3,11 +3,10 @@
 /// Presents a centered modal with a query input and a list of sessions
 /// that can be filtered by typing.  Arrow keys (or Ctrl-j / Ctrl-k)
 /// navigate the list, Enter selects, Escape closes.
-
 use std::fmt::Write as FmtWrite;
 
-use nucleo::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
 use nucleo::Matcher;
+use nucleo::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -164,13 +163,13 @@ impl SessionFinder {
 
 /// Catppuccin Mocha palette constants (RGB).
 mod colors {
-    pub const BORDER: (u8, u8, u8) = (88, 91, 112);      // #585b70
-    pub const TITLE: (u8, u8, u8) = (137, 180, 250);      // #89b4fa
-    pub const BG: (u8, u8, u8) = (30, 30, 46);            // #1e1e2e
-    pub const TEXT: (u8, u8, u8) = (205, 214, 244);        // #cdd6f4
-    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68);   // #313244
+    pub const BORDER: (u8, u8, u8) = (88, 91, 112); // #585b70
+    pub const TITLE: (u8, u8, u8) = (137, 180, 250); // #89b4fa
+    pub const BG: (u8, u8, u8) = (30, 30, 46); // #1e1e2e
+    pub const TEXT: (u8, u8, u8) = (205, 214, 244); // #cdd6f4
+    pub const SELECTED_BG: (u8, u8, u8) = (49, 50, 68); // #313244
     pub const SELECTED_FG: (u8, u8, u8) = (137, 180, 250); // #89b4fa
-    pub const ATTACHED: (u8, u8, u8) = (166, 227, 161);   // #a6e3a1
+    pub const ATTACHED: (u8, u8, u8) = (166, 227, 161); // #a6e3a1
 }
 
 impl SessionFinder {
@@ -197,31 +196,45 @@ impl SessionFinder {
 
         let bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::BG.0, colors::BG.1, colors::BG.2
+            colors::BG.0,
+            colors::BG.1,
+            colors::BG.2
         );
         let border_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::BORDER.0, colors::BORDER.1, colors::BORDER.2
+            colors::BORDER.0,
+            colors::BORDER.1,
+            colors::BORDER.2
         );
         let title_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TITLE.0, colors::TITLE.1, colors::TITLE.2
+            colors::TITLE.0,
+            colors::TITLE.1,
+            colors::TITLE.2
         );
         let text_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::TEXT.0, colors::TEXT.1, colors::TEXT.2
+            colors::TEXT.0,
+            colors::TEXT.1,
+            colors::TEXT.2
         );
         let sel_bg = format!(
             "\x1b[48;2;{};{};{}m",
-            colors::SELECTED_BG.0, colors::SELECTED_BG.1, colors::SELECTED_BG.2
+            colors::SELECTED_BG.0,
+            colors::SELECTED_BG.1,
+            colors::SELECTED_BG.2
         );
         let sel_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::SELECTED_FG.0, colors::SELECTED_FG.1, colors::SELECTED_FG.2
+            colors::SELECTED_FG.0,
+            colors::SELECTED_FG.1,
+            colors::SELECTED_FG.2
         );
         let attached_fg = format!(
             "\x1b[38;2;{};{};{}m",
-            colors::ATTACHED.0, colors::ATTACHED.1, colors::ATTACHED.2
+            colors::ATTACHED.0,
+            colors::ATTACHED.1,
+            colors::ATTACHED.2
         );
 
         let inner_width = width.saturating_sub(2); // inside the left/right borders
@@ -295,18 +308,13 @@ impl SessionFinder {
                 " ".repeat(padding_right),
             );
         } else {
-            for (display_i, &entry_idx) in
-                self.filtered.iter().take(max_items).enumerate()
-            {
+            for (display_i, &entry_idx) in self.filtered.iter().take(max_items).enumerate() {
                 let entry = &self.entries[entry_idx];
                 let is_selected = display_i == self.selected_index;
 
                 // Build content: "name - N win" + optional " *"
                 let attached_marker = if entry.attached { " \u{25cf}" } else { "" };
-                let label = format!(
-                    "{} - {} win",
-                    entry.name, entry.window_count
-                );
+                let label = format!("{} - {} win", entry.name, entry.window_count);
                 // Truncate label if needed (leave room for attached marker + padding).
                 let max_label_len = inner_width.saturating_sub(attached_marker.len());
                 let label_truncated = if label.len() > max_label_len {
@@ -328,10 +336,7 @@ impl SessionFinder {
                 );
 
                 if entry.attached {
-                    let _ = write!(
-                        output,
-                        "{row_bg}{attached_fg}{attached_marker}",
-                    );
+                    let _ = write!(output, "{row_bg}{attached_fg}{attached_marker}",);
                 }
 
                 let _ = write!(

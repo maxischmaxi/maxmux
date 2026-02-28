@@ -68,12 +68,7 @@ impl PluginLoader {
             Ok(entries) => entries
                 .filter_map(|entry| entry.ok())
                 .map(|entry| entry.path())
-                .filter(|path| {
-                    path.is_file()
-                        && path
-                            .extension()
-                            .is_some_and(|ext| ext == "lua")
-                })
+                .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "lua"))
                 .collect(),
             Err(_) => Vec::new(),
         };

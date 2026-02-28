@@ -138,9 +138,7 @@ mod tests {
         };
         writer.send_message(&msg).await.unwrap();
         let received: ServerMessage = split2.reader.read_message().await.unwrap();
-        assert!(
-            matches!(received, ServerMessage::Error { message } if message == "test error")
-        );
+        assert!(matches!(received, ServerMessage::Error { message } if message == "test error"));
     }
 
     #[tokio::test]

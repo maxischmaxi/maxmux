@@ -116,9 +116,7 @@ impl MouseSelection {
                 end_row,
                 end_col,
             } => {
-                if *start_row < *end_row
-                    || (*start_row == *end_row && *start_col <= *end_col)
-                {
+                if *start_row < *end_row || (*start_row == *end_row && *start_col <= *end_col) {
                     Some((*start_row, *start_col, *end_row, *end_col))
                 } else {
                     Some((*end_row, *end_col, *start_row, *start_col))

@@ -159,11 +159,7 @@ mod tests {
     #[test]
     fn test_unregister() {
         let mut registry = CommandRegistry::new();
-        registry.register(
-            "test:cmd",
-            "desc",
-            Box::new(|_| Box::pin(async { Ok(()) })),
-        );
+        registry.register("test:cmd", "desc", Box::new(|_| Box::pin(async { Ok(()) })));
         assert!(registry.unregister("test:cmd"));
         assert!(!registry.has("test:cmd"));
         assert!(!registry.unregister("test:cmd")); // already removed
